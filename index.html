@@ -83,6 +83,14 @@
             background-color: #555;
             cursor: not-allowed;
         }
+        .strat-btn {
+            background-color: #bb86fc;
+            font-size: 0.8em;
+            padding: 8px 12px;
+        }
+        .strat-btn:hover:not(:disabled) {
+            background-color: #9965f4;
+        }
         #status-log {
             background-color: #2a2a2a;
             border: 1px solid #333;
@@ -114,6 +122,15 @@
             <input type="text" id="promptInput" placeholder="Enter prompt to influence video...">
             <button id="sendPromptBtn" disabled>Send Prompt</button>
             <button id="connectStreamBtn">Connect Stream (Auto-Retry)</button>
+            <button id="disconnectBtn" style="background-color: #ff5252; color: white;">Disconnect</button>
+        </div>
+        
+        <div class="controls" style="margin-top: 10px;">
+            <button class="strat-btn" onclick="testStrategy(1)">Test Strat 1</button>
+            <button class="strat-btn" onclick="testStrategy(2)">Test Strat 2</button>
+            <button class="strat-btn" onclick="testStrategy(3)">Test Strat 3</button>
+            <button class="strat-btn" onclick="testStrategy(4)">Test Strat 4</button>
+            <button class="strat-btn" onclick="testStrategy(5)">Test Strat 5</button>
         </div>
 
         <div id="status-log"></div>
@@ -125,6 +142,7 @@
         const promptInput = document.getElementById('promptInput');
         const sendPromptBtn = document.getElementById('sendPromptBtn');
         const connectStreamBtn = document.getElementById('connectStreamBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
         const statusLog = document.getElementById('status-log');
 
         const SCOPE_API_BASE = 'https://daydream-scope-proxy.onrender.com';
@@ -182,8 +200,7 @@
             pc.onconnectionstatechange = () => {
                 logStatus(`WebRTC connection state: ${pc.connectionState}`);
                 if (pc.connectionState === 'connected') {
-                    logStatus('🎉 WebRTC Fully Connected!');
-                    connectStreamBtn.textContent = 'Disconnect Stream';
+                    logStatus('🎉 WebRTC Fully Connected! Video should be playing.');
                     connectStreamBtn.disabled = false;
                     sendPromptBtn.disabled = false;
                     isConnecting = false;
@@ -198,6 +215,10 @@
             // Request to receive video and audio
             pc.addTransceiver('video', { direction: 'recvonly' });
             pc.addTransceiver('audio', { direction: 'recvonly' });
+            
+            // Setup parameters datachannel so Scope backend can receive prompts
+            dataChannel = pc.createDataChannel("parameters", {ordered: true});
+            dataChannel.onopen = () => { logStatus("Data channel 'parameters' opened!"); };
 
             return pc;
         }
@@ -235,8 +256,6 @@
             });
 
             const finalSdp = peerConnection.localDescription.sdp;
-            logStatus('Strategy 1 SDP generated', false, finalSdp);
-
             const answer = await sendApiRequest(
                 SCOPE_WEBRTC_OFFER_ENDPOINT, 
                 { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -276,9 +295,8 @@
             );
             
             logStatus('Strategy 2 Server Answer received', false, answerText);
-            // Some servers return raw text for application/sdp
             let answerDesc = { type: 'answer', sdp: answerText };
-            try { answerDesc = JSON.parse(answerText); } catch(e) {} // Fallback if server sent JSON anyway
+            try { answerDesc = JSON.parse(answerText); } catch(e) {}
             await peerConnection.setRemoteDescription(new RTCSessionDescription(answerDesc));
         }
 
@@ -289,8 +307,6 @@
             
             const offer = await peerConnection.createOffer();
             await peerConnection.setLocalDescription(offer);
-
-            logStatus('Strategy 3 SDP generated (Trickle)', false, offer.sdp);
 
             const answer = await sendApiRequest(
                 SCOPE_WEBRTC_OFFER_ENDPOINT, 
@@ -321,14 +337,10 @@
             await peerConnection.setRemoteDescription(new RTCSessionDescription(answerDesc));
         }
 
-        // Strategy 5: Add a DataChannel before creating the offer
-        // Sometimes backend requires a data channel to generate ice-ufrag properly for Aiortc
+        // Strategy 5: Add a DataChannel manually before offer
         async function strategy5() {
             logStatus('--- Trying Strategy 5: DataChannel forced + JSON + Full ICE ---');
             peerConnection = createPeerConnectionBase();
-            
-            // Force Data Channel creation BEFORE offer
-            dataChannel = peerConnection.createDataChannel("prompts");
             
             const offer = await peerConnection.createOffer();
             await peerConnection.setLocalDescription(offer);
@@ -346,8 +358,6 @@
             });
 
             const finalSdp = peerConnection.localDescription.sdp;
-            logStatus('Strategy 5 SDP generated', false, finalSdp);
-
             const answer = await sendApiRequest(
                 SCOPE_WEBRTC_OFFER_ENDPOINT, 
                 { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -357,54 +367,60 @@
             await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
         }
 
-        async function executeConnectionLoop() {
-            const strategies = [strategy1, strategy2, strategy3, strategy4, strategy5];
+        const strategies = [strategy1, strategy2, strategy3, strategy4, strategy5];
+
+        async function testStrategy(num) {
+            disconnect();
+            isConnecting = true;
+            connectStreamBtn.disabled = true;
+            statusLog.innerHTML = '';
             
+            try {
+                await strategies[num-1]();
+                logStatus(`✅ Strategy ${num} completed SDP exchange without errors! Waiting for stream...`);
+            } catch (error) {
+                logStatus(`❌ Strategy ${num} Failed: ${error.message}`, true);
+                disconnect();
+            }
+        }
+
+        async function executeConnectionLoop() {
             for (let i = 0; i < strategies.length; i++) {
                 try {
                     await strategies[i]();
                     logStatus(`✅ Strategy ${i+1} completed SDP exchange without errors! Waiting for stream...`);
-                    return; // If it succeeds, exit loop
+                    return; 
                 } catch (error) {
                     logStatus(`❌ Strategy ${i+1} Failed: ${error.message}`, true);
                     if (peerConnection) peerConnection.close();
                 }
             }
-            
-            logStatus('🚨 All 5 connection strategies failed. Please send a screenshot of this log block to the agent.', true);
+            logStatus('🚨 All 5 connection strategies failed.', true);
             resetUI();
         }
 
         async function connectStream() {
-            if (peerConnection && peerConnection.connectionState !== 'closed') {
-                logStatus('Disconnecting existing stream.');
-                peerConnection.close();
-                resetUI();
-                return;
-            }
-
+            disconnect();
             isConnecting = true;
-            statusLog.innerHTML = ''; // Clear previous logs
+            statusLog.innerHTML = '';
             logStatus('🚀 Starting automated WebRTC connection sequence...');
             connectStreamBtn.disabled = true;
-            sendPromptBtn.disabled = true;
-            videoPlaceholder.style.display = 'block';
-            remoteVideo.style.display = 'none';
-            remoteVideo.srcObject = null;
-
             await executeConnectionLoop();
         }
-
-        function resetUI() {
-            isConnecting = false;
+        
+        function disconnect() {
             if (peerConnection) {
                 peerConnection.close();
                 peerConnection = null;
             }
+            resetUI();
+        }
+
+        function resetUI() {
+            isConnecting = false;
             remoteVideo.srcObject = null;
             videoPlaceholder.style.display = 'block';
             remoteVideo.style.display = 'none';
-            connectStreamBtn.textContent = 'Connect Stream (Auto-Retry)';
             connectStreamBtn.disabled = false;
             sendPromptBtn.disabled = true;
         }
@@ -413,22 +429,24 @@
             const promptText = promptInput.value;
             if (!promptText) return;
 
-            logStatus(`Sending prompt via HTTP: "${promptText}"`);
-            try {
-                const response = await fetch(SCOPE_PROMPT_ENDPOINT, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt: promptText })
-                });
-                if (!response.ok) throw new Error(await response.text());
-                logStatus('Prompt successfully received by server.');
-            } catch (error) {
-                logStatus(`Prompt failed: ${error.message}`, true);
+            logStatus(`Sending prompt: "${promptText}"`);
+            if (dataChannel && dataChannel.readyState === 'open') {
+                try {
+                    // Daydream Scope expects JSON like {"prompt": "value"} or specific param updates
+                    const payload = JSON.stringify({ prompt: promptText });
+                    dataChannel.send(payload);
+                    logStatus(`Prompt sent via Data Channel 'parameters'. Payload: ${payload}`);
+                } catch (error) {
+                    logStatus(`Error sending prompt via Data Channel: ${error.message}`, true);
+                }
+            } else {
+                logStatus('Data channel not open. Ensure stream is connected.', true);
             }
             promptInput.value = '';
         }
 
         connectStreamBtn.addEventListener('click', connectStream);
+        disconnectBtn.addEventListener('click', disconnect);
         sendPromptBtn.addEventListener('click', sendPrompt);
         promptInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendPrompt();
