@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daydream Scope Live Stream</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            margin: 0;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+        .container {
+            background-color: #1e1e1e;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 900px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        h1 {
+            color: #bb86fc;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        #video-display {
+            width: 100%;
+            aspect-ratio: 16 / 9;
+            background-color: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #888;
+            font-size: 1.2em;
+        }
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* Use 'contain' to ensure the whole video is visible */
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        input[type="text"] {
+            flex-grow: 1;
+            padding: 12px;
+            border: 1px solid #333;
+            border-radius: 5px;
+            background-color: #2a2a2a;
+            color: #e0e0e0;
+            font-size: 1em;
+            min-width: 200px;
+        }
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: #03dac6;
+            color: #121212;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover:not(:disabled) {
+            background-color: #03a89e;
+        }
+        button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+        #status-log {
+            background-color: #2a2a2a;
+            border: 1px solid #333;
+            border-radius: 5px;
+            padding: 10px;
+            max-height: 150px;
+            overflow-y: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9em;
+            color: #bbb;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Daydream Scope Live Feed</h1>
+        <div id="video-display">
+            <video id="remoteVideo" autoplay playsinline></video>
+            <span id="video-placeholder">Connecting to Scope...</span>
+        </div>
+
+        <div class="controls">
+            <input type="text" id="promptInput" placeholder="Enter prompt to influence video...">
+            <button id="sendPromptBtn">Send Prompt</button>
+            <button id="connectStreamBtn">Connect Stream</button>
+        </div>
+
+        <div id="status-log"></div>
+    </div>
+
+    <script>
+        const remoteVideo = document.getElementById('remoteVideo');
+        const videoPlaceholder = document.getElementById('video-placeholder');
+        const promptInput = document.getElementById('promptInput');
+        const sendPromptBtn = document.getElementById('sendPromptBtn');
+        const connectStreamBtn = document.getElementById('connectStreamBtn');
+        const statusLog = document.getElementById('status-log');
+
+        const SCOPE_API_BASE = 'http://34.44.193.2:8000';
+        const SCOPE_WEBRTC_OFFER_ENDPOINT = `${SCOPE_API_BASE}/api/v1/webrtc/offer`;
+        const SCOPE_PROMPT_ENDPOINT = `${SCOPE_API_BASE}/api/v1/prompt`; // Placeholder or actual prompt API
+
+        let peerConnection;
+        let dataChannel;
+
+        function logStatus(message, isError = false) {
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.style.color = isError ? '#cf6679' : '#e0e0e0';
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            statusLog.prepend(entry);
+            // Keep log clean, max 100 entries
+            if (statusLog.children.length > 100) {
+                statusLog.removeChild(statusLog.lastChild);
+            }
+            console.log(message);
+        }
+
+        async function createPeerConnection() {
+            peerConnection = new RTCPeerConnection({
+                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+            });
+
+            peerConnection.ontrack = (event) => {
+                logStatus('Received remote stream track.');
+                if (remoteVideo.srcObject !== event.streams[0]) {
+                    remoteVideo.srcObject = event.streams[0];
+                    videoPlaceholder.style.display = 'none';
+                    remoteVideo.style.display = 'block';
+                }
+            };
+
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    // ICE candidates are usually exchanged via the signaling server
+                    // In a WHIP/WHEP context, ICE candidates are part of SDP, not separate messages
+                    logStatus('ICE candidate gathered (not sent separately in WHIP/WHEP model).');
+                }
+            };
+
+            peerConnection.oniceconnectionstatechange = () => {
+                logStatus(`ICE connection state: ${peerConnection.iceConnectionState}`);
+                if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'disconnected') {
+                    logStatus('ICE connection failed or disconnected. Attempting to reconnect or restart.', true);
+                    // Implement re-connection logic if necessary
+                }
+            };
+
+            peerConnection.onconnectionstatechange = () => {
+                logStatus(`WebRTC connection state: ${peerConnection.connectionState}`);
+                if (peerConnection.connectionState === 'connected') {
+                    logStatus('WebRTC PeerConnection established!');
+                    connectStreamBtn.textContent = 'Disconnect Stream';
+                    connectStreamBtn.disabled = false;
+                    sendPromptBtn.disabled = false;
+                } else if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
+                    logStatus('WebRTC PeerConnection disconnected or failed.', true);
+                    connectStreamBtn.textContent = 'Connect Stream';
+                    connectStreamBtn.disabled = false;
+                    sendPromptBtn.disabled = true;
+                }
+            };
+
+            // Create a data channel for sending prompts
+            dataChannel = peerConnection.createDataChannel("prompts");
+            dataChannel.onopen = (event) => {
+                logStatus("Data channel opened for prompts!");
+                sendPromptBtn.disabled = false;
+            };
+            dataChannel.onmessage = (event) => {
+                logStatus(`Data channel message received: ${event.data}`);
+            };
+            dataChannel.onclose = () => {
+                logStatus("Data channel closed.");
+                sendPromptBtn.disabled = true;
+            };
+            dataChannel.onerror = (error) => {
+                logStatus(`Data channel error: ${error}`, true);
+            };
+
+            // Request to receive video and audio
+            peerConnection.addTransceiver('video', { direction: 'recvonly' });
+            peerConnection.addTransceiver('audio', { direction: 'recvonly' });
+
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+
+            logStatus('Created SDP offer. Sending to Scope API...');
+            return offer;
+        }
+
+        async function sendOfferAndHandleAnswer(offer) {
+            try {
+                const response = await fetch(SCOPE_WEBRTC_OFFER_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/sdp', // WHIP/WHEP expects application/sdp
+                        'Accept': 'application/sdp'
+                    },
+                    body: offer.sdp
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Failed to get SDP answer: ${response.status} ${response.statusText} - ${errorText}`);
+                }
+
+                const sdpAnswer = await response.text();
+                await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: sdpAnswer }));
+                logStatus('Received and set SDP answer. Stream should be connecting.');
+
+            } catch (error) {
+                logStatus(`Error during offer/answer exchange: ${error.message}`, true);
+                resetConnection();
+            }
+        }
+
+        async function connectStream() {
+            if (peerConnection && peerConnection.connectionState !== 'closed') {
+                logStatus('Disconnecting existing stream.');
+                peerConnection.close();
+                resetConnection();
+                return;
+            }
+
+            logStatus('Attempting to connect to Daydream Scope Stream...');
+            connectStreamBtn.disabled = true;
+            sendPromptBtn.disabled = true;
+            videoPlaceholder.style.display = 'block';
+            remoteVideo.style.display = 'none';
+            remoteVideo.srcObject = null;
+
+            try {
+                const offer = await createPeerConnection();
+                await sendOfferAndHandleAnswer(offer);
+            } catch (error) {
+                logStatus(`Failed to initiate stream: ${error.message}`, true);
+                resetConnection();
+            } finally {
+                connectStreamBtn.disabled = false;
+            }
+        }
+
+        function resetConnection() {
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            if (dataChannel) {
+                dataChannel = null;
+            }
+            remoteVideo.srcObject = null;
+            videoPlaceholder.style.display = 'block';
+            remoteVideo.style.display = 'none';
+            connectStreamBtn.textContent = 'Connect Stream';
+            connectStreamBtn.disabled = false;
+            sendPromptBtn.disabled = true;
+            logStatus('Connection reset.');
+        }
+
+        async function sendPrompt() {
+            const promptText = promptInput.value;
+            if (!promptText) {
+                logStatus('Prompt input is empty.', true);
+                return;
+            }
+
+            logStatus(`Attempting to send prompt: "${promptText}"`);
+            if (dataChannel && dataChannel.readyState === 'open') {
+                try {
+                    dataChannel.send(JSON.stringify({ type: 'prompt', text: promptText, timestamp: Date.now() }));
+                    logStatus(`Prompt sent via Data Channel.`);
+                } catch (error) {
+                    logStatus(`Error sending prompt via Data Channel: ${error.message}`, true);
+                }
+            } else {
+                logStatus('Data channel not open or not available. Attempting via HTTP API (fallback)...');
+                try {
+                    const response = await fetch(SCOPE_PROMPT_ENDPOINT, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ prompt: promptText })
+                    });
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`API failed: ${response.status} ${response.statusText} - ${errorText}`);
+                    }
+                    logStatus(`Prompt sent via HTTP API. Server response: ${await response.json().then(data => JSON.stringify(data))}`);
+                } catch (error) {
+                    logStatus(`Failed to send prompt via HTTP API: ${error.message}`, true);
+                }
+            }
+            promptInput.value = '';
+        }
+
+        connectStreamBtn.addEventListener('click', connectStream);
+        sendPromptBtn.addEventListener('click', sendPrompt);
+        promptInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendPrompt();
+            }
+        });
+
+        // Initial setup
+        sendPromptBtn.disabled = true;
+        remoteVideo.style.display = 'none';
+    </script>
+</body>
+</html>
