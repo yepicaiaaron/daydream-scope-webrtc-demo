@@ -265,7 +265,11 @@
             const payload = { 
                 sdp: finalSdp, 
                 type: 'offer',
-                initialParameters: INITIAL_PARAMS
+                initialParameters: {
+                    pipeline_ids: ["memflow"],
+                    input_mode: "text",
+                    prompt: "A cinematic landscape"
+                }
             };
 
             const answer = await sendApiRequest(
@@ -277,12 +281,15 @@
             logStatus('Strategy 1 Server Answer received', false, answer);
             await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
 
-            // CRITICAL FIX: Send a default prompt immediately so the backend doesn't crash with ValueError: Required input 'prompts' is missing
             setTimeout(() => {
                 if (dataChannel && dataChannel.readyState === 'open') {
-                    const startPayload = JSON.stringify({ prompts: [{text: "A cinematic landscape", weight: 1.0}] });
+                    // Try both `prompts` and `prompt` formats just in case
+                    const startPayload = JSON.stringify({ 
+                        prompt: "A cinematic landscape",
+                        prompts: [{text: "A cinematic landscape", weight: 1.0}] 
+                    });
                     dataChannel.send(startPayload);
-                    logStatus(`Sent default prompt via Data Channel to avoid crash: ${startPayload}`);
+                    logStatus(`Sent fallback prompts via Data Channel: ${startPayload}`);
                 }
             }, 1000);
         }
