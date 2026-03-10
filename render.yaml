@@ -1,13 +1,9 @@
 services:
-  - type: static_site
-    name: daydream-scope-stream
-    env: static
-    buildCommand: ""
-    staticPublishPath: "."
-    headers:
-      - path: /*.html
-        name: Content-Type
-        value: text/html
-      - path: /*
-        name: X-Frame-Options
-        value: DENY
+  - type: web
+    name: daydream-scope-proxy
+    runtime: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn proxy_app:app --worker-class gevent --bind 0.0.0.0:$PORT"
+    envVars:
+      - key: TARGET_SCOPE_URL
+        value: "http://34.44.193.2:8000" # Your GCP Daydream Scope App IP and Port
