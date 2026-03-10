@@ -223,10 +223,10 @@
                 const response = await fetch(SCOPE_WEBRTC_OFFER_ENDPOINT, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/sdp', // WHIP/WHEP expects application/sdp
-                        'Accept': 'application/sdp'
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
                     },
-                    body: offer.sdp
+                    body: JSON.stringify({ sdp: offer.sdp, type: offer.type })
                 });
 
                 if (!response.ok) {
@@ -234,8 +234,8 @@
                     throw new Error(`Failed to get SDP answer: ${response.status} ${response.statusText} - ${errorText}`);
                 }
 
-                const sdpAnswer = await response.text();
-                await peerConnection.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: sdpAnswer }));
+                const answerJson = await response.json();
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(answerJson));
                 logStatus('Received and set SDP answer. Stream should be connecting.');
 
             } catch (error) {
