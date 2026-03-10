@@ -268,7 +268,8 @@
                 initialParameters: {
                     pipeline_ids: ["memflow"],
                     input_mode: "text",
-                    prompt: "A cinematic landscape"
+                    prompt: "A cinematic landscape",
+                    paused: false
                 }
             };
 
@@ -283,13 +284,14 @@
 
             setTimeout(() => {
                 if (dataChannel && dataChannel.readyState === 'open') {
-                    // Try both `prompts` and `prompt` formats just in case
+                    // Try both `prompts` and `prompt` formats just in case, and explicitly set paused to false
                     const startPayload = JSON.stringify({ 
                         prompt: "A cinematic landscape",
-                        prompts: [{text: "A cinematic landscape", weight: 1.0}] 
+                        prompts: [{text: "A cinematic landscape", weight: 1.0}],
+                        paused: false
                     });
                     dataChannel.send(startPayload);
-                    logStatus(`Sent fallback prompts via Data Channel: ${startPayload}`);
+                    logStatus(`Sent fallback prompts and unpause via Data Channel: ${startPayload}`);
                 }
             }, 1000);
         }
