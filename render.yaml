@@ -1,26 +1,6 @@
-# render.yaml
-# For deploying the Daydream Scope Live Stream Web Page
-# This file should be placed in the root of your GitHub repository.
-
 services:
   - type: static_site
-    name: daydream-scope-stream
+    name: helios-webrtc-test
     env: static
-    buildCommand: "" # No build command for a simple HTML file, leave empty
-    staticPublishPath: "." # Assumes index.html is in the root of the repo
-    repo: https://github.com/yepicaiaaron/bigscreenhack-website.git # Replace if different
-    branch: main # Or your deployment branch
-    pullRequestPreviewsEnabled: true # Optional
-    # headers:
-    #   - path: /*
-    #     name: X-Frame-Options
-    #     value: DENY
-    # rewrites:
-    #   - source: /foo
-    #     destination: /bar
-    # redirects:
-    #   - source: /old
-    #     destination: /new
-    # environmentVariables:
-    #   - key: SCOPE_API_BASE
-    #     value: "https://your-public-scope-api.render.com" # Replace with your public Scope API URL if needed
+    buildCommand: ""
+    staticPublishPath: "."
