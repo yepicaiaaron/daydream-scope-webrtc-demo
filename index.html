@@ -214,8 +214,29 @@
             const offer = await peerConnection.createOffer();
             await peerConnection.setLocalDescription(offer);
 
-            logStatus('Created SDP offer. Sending to Scope API...');
-            return offer;
+            // Wait for ICE gathering to complete before sending the offer
+            await new Promise((resolve) => {
+                if (peerConnection.iceGatheringState === 'complete') {
+                    resolve();
+                } else {
+                    const checkState = () => {
+                        if (peerConnection.iceGatheringState === 'complete') {
+                            peerConnection.removeEventListener('icegatheringstatechange', checkState);
+                            resolve();
+                        }
+                    };
+                    peerConnection.addEventListener('icegatheringstatechange', checkState);
+                    // Add a timeout just in case it takes too long
+                    setTimeout(() => {
+                        peerConnection.removeEventListener('icegatheringstatechange', checkState);
+                        resolve();
+                    }, 3000);
+                }
+            });
+
+            logStatus('ICE gathering complete. Created SDP offer. Sending to Scope API...');
+            // Return the updated local description which includes the ICE candidates
+            return peerConnection.localDescription;
         }
 
         async function sendOfferAndHandleAnswer(offer) {
