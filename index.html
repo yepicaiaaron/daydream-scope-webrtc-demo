@@ -276,6 +276,15 @@
             
             logStatus('Strategy 1 Server Answer received', false, answer);
             await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+
+            // CRITICAL FIX: Send a default prompt immediately so the backend doesn't crash with ValueError: Required input 'prompts' is missing
+            setTimeout(() => {
+                if (dataChannel && dataChannel.readyState === 'open') {
+                    const startPayload = JSON.stringify({ prompts: [{text: "A cinematic landscape", weight: 1.0}] });
+                    dataChannel.send(startPayload);
+                    logStatus(`Sent default prompt via Data Channel to avoid crash: ${startPayload}`);
+                }
+            }, 1000);
         }
 
         // Strategy 2: Plain Text SDP (application/sdp) + Full ICE
