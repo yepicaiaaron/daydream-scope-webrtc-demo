@@ -256,10 +256,20 @@
             });
 
             const finalSdp = peerConnection.localDescription.sdp;
+            
+            // Pass the pipeline_ids inside initialParameters
+            const payload = { 
+                sdp: finalSdp, 
+                type: 'offer',
+                initialParameters: {
+                    pipeline_ids: ["memflow"]
+                }
+            };
+
             const answer = await sendApiRequest(
                 SCOPE_WEBRTC_OFFER_ENDPOINT, 
                 { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                JSON.stringify({ sdp: finalSdp, type: 'offer' })
+                JSON.stringify(payload)
             );
             
             logStatus('Strategy 1 Server Answer received', false, answer);
@@ -358,10 +368,19 @@
             });
 
             const finalSdp = peerConnection.localDescription.sdp;
+            
+            const payload = { 
+                sdp: finalSdp, 
+                type: 'offer',
+                initialParameters: {
+                    pipeline_ids: ["memflow"]
+                }
+            };
+            
             const answer = await sendApiRequest(
                 SCOPE_WEBRTC_OFFER_ENDPOINT, 
                 { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                JSON.stringify({ sdp: finalSdp, type: 'offer' })
+                JSON.stringify(payload)
             );
             
             await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
