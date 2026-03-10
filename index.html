@@ -261,9 +261,7 @@
             const payload = { 
                 sdp: finalSdp, 
                 type: 'offer',
-                initialParameters: {
-                    pipeline_ids: ["memflow"]
-                }
+                initialParameters: {}
             };
 
             const answer = await sendApiRequest(
@@ -274,6 +272,14 @@
             
             logStatus('Strategy 1 Server Answer received', false, answer);
             await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+
+            setTimeout(() => {
+                if (dataChannel && dataChannel.readyState === 'open') {
+                    const startPayload = JSON.stringify({ pipeline_ids: ["memflow"], input_mode: "text" });
+                    dataChannel.send(startPayload);
+                    logStatus(`Sent startup parameters via Data Channel: ${startPayload}`);
+                }
+            }, 1000);
         }
 
         // Strategy 2: Plain Text SDP (application/sdp) + Full ICE
@@ -372,9 +378,7 @@
             const payload = { 
                 sdp: finalSdp, 
                 type: 'offer',
-                initialParameters: {
-                    pipeline_ids: ["memflow"]
-                }
+                initialParameters: {} // Empty to avoid "None is not in list" backend crash
             };
             
             const answer = await sendApiRequest(
@@ -384,6 +388,15 @@
             );
             
             await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+
+            // After connection is established, send the pipeline_ids over the data channel!
+            setTimeout(() => {
+                if (dataChannel && dataChannel.readyState === 'open') {
+                    const startPayload = JSON.stringify({ pipeline_ids: ["memflow"], input_mode: "text" });
+                    dataChannel.send(startPayload);
+                    logStatus(`Sent startup parameters via Data Channel: ${startPayload}`);
+                }
+            }, 1000);
         }
 
         const strategies = [strategy1, strategy2, strategy3, strategy4, strategy5];
