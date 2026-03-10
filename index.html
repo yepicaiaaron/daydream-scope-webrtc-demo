@@ -55,7 +55,7 @@
             gap: 10px;
             flex-wrap: wrap;
         }
-        input[type=\"text\"] {
+        input[type="text"] {
             flex-grow: 1;
             padding: 12px;
             border: 1px solid #333;
@@ -101,20 +101,20 @@
     </style>
 </head>
 <body>
-    <div class=\"container\">
+    <div class="container">
         <h1>Daydream Scope Live Feed</h1>
-        <div id=\"video-display\">
-            <video id=\"remoteVideo\" autoplay playsinline></video>
-            <span id=\"video-placeholder\">Connecting to Scope...</span>
+        <div id="video-display">
+            <video id="remoteVideo" autoplay playsinline></video>
+            <span id="video-placeholder">Connecting to Scope...</span>
         </div>
 
-        <div class=\"controls\">
-            <input type=\"text\" id=\"promptInput\" placeholder=\"Enter prompt to influence video...\">
-            <button id=\"sendPromptBtn\">Send Prompt</button>
-            <button id=\"connectStreamBtn\">Connect Stream</button>
+        <div class="controls">
+            <input type="text" id="promptInput" placeholder="Enter prompt to influence video...">
+            <button id="sendPromptBtn">Send Prompt</button>
+            <button id="connectStreamBtn">Connect Stream</button>
         </div>
 
-        <div id=\"status-log\"></div>
+        <div id="status-log"></div>
     </div>
 
     <script>
@@ -191,16 +191,16 @@
             };
 
             // Create a data channel for sending prompts
-            dataChannel = peerConnection.createDataChannel(\"prompts\");
+            dataChannel = peerConnection.createDataChannel("prompts");
             dataChannel.onopen = (event) => {
-                logStatus(\"Data channel opened for prompts!\");
+                logStatus("Data channel opened for prompts!");
                 sendPromptBtn.disabled = false;
             };
             dataChannel.onmessage = (event) => {
                 logStatus(`Data channel message received: ${event.data}`);
             };
             dataChannel.onclose = () => {
-                logStatus(\"Data channel closed.\");
+                logStatus("Data channel closed.");
                 sendPromptBtn.disabled = true;
             };
             dataChannel.onerror = (error) => {
@@ -292,7 +292,7 @@
                 return;
             }
 
-            logStatus(`Attempting to send prompt: \"${promptText}\"`);
+            logStatus(`Attempting to send prompt: "${promptText}"`);
             if (dataChannel && dataChannel.readyState === 'open') {
                 try {
                     dataChannel.send(JSON.stringify({ type: 'prompt', text: promptText, timestamp: Date.now() }));
