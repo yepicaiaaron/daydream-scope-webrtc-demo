@@ -234,6 +234,11 @@
             return expectJson ? JSON.parse(text) : text;
         }
 
+        const INITIAL_PARAMS = {
+            pipeline_ids: ["memflow"],
+            input_mode: "text"
+        };
+
         // Strategy 1: JSON format with full ICE gathering
         async function strategy1() {
             logStatus('--- Trying Strategy 1: JSON payload + Full ICE Gathering ---');
@@ -257,11 +262,10 @@
 
             const finalSdp = peerConnection.localDescription.sdp;
             
-            // Pass the pipeline_ids inside initialParameters
             const payload = { 
                 sdp: finalSdp, 
                 type: 'offer',
-                initialParameters: {}
+                initialParameters: INITIAL_PARAMS
             };
 
             const answer = await sendApiRequest(
@@ -272,14 +276,6 @@
             
             logStatus('Strategy 1 Server Answer received', false, answer);
             await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-
-            setTimeout(() => {
-                if (dataChannel && dataChannel.readyState === 'open') {
-                    const startPayload = JSON.stringify({ pipeline_ids: ["memflow"], input_mode: "text" });
-                    dataChannel.send(startPayload);
-                    logStatus(`Sent startup parameters via Data Channel: ${startPayload}`);
-                }
-            }, 1000);
         }
 
         // Strategy 2: Plain Text SDP (application/sdp) + Full ICE
@@ -327,7 +323,7 @@
             const answer = await sendApiRequest(
                 SCOPE_WEBRTC_OFFER_ENDPOINT, 
                 { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                JSON.stringify({ sdp: offer.sdp, type: 'offer' })
+                JSON.stringify({ sdp: offer.sdp, type: 'offer', initialParameters: INITIAL_PARAMS })
             );
             
             await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
@@ -378,7 +374,7 @@
             const payload = { 
                 sdp: finalSdp, 
                 type: 'offer',
-                initialParameters: {} // Empty to avoid "None is not in list" backend crash
+                initialParameters: INITIAL_PARAMS
             };
             
             const answer = await sendApiRequest(
@@ -388,15 +384,6 @@
             );
             
             await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-
-            // After connection is established, send the pipeline_ids over the data channel!
-            setTimeout(() => {
-                if (dataChannel && dataChannel.readyState === 'open') {
-                    const startPayload = JSON.stringify({ pipeline_ids: ["memflow"], input_mode: "text" });
-                    dataChannel.send(startPayload);
-                    logStatus(`Sent startup parameters via Data Channel: ${startPayload}`);
-                }
-            }, 1000);
         }
 
         const strategies = [strategy1, strategy2, strategy3, strategy4, strategy5];
