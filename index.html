@@ -237,11 +237,13 @@
         const INITIAL_PARAMS = {
             pipeline_ids: ["longlive"],
             input_mode: "text",
-            prompts: [{ text: "A cinematic landscape", weight: 1.0 }],
+            prompts: [{ text: "A 3D animated scene. A **panda** walks along a path towards the camera in a park on a spring day.", weight: 100.0 }],
             prompt_interpolation_method: "linear",
-            denoising_step_list: [700, 500],
-            noise_controller: true,
-            manage_cache: true
+            denoising_step_list: [1000, 750, 500, 250],
+            manage_cache: true,
+            vace_enabled: true,
+            vace_context_scale: 1.0,
+            recording: false
         };
 
         // Strategy 1: JSON format with full ICE gathering
