@@ -471,8 +471,11 @@
             logStatus(`Sending prompt: "${promptText}"`);
             if (dataChannel && dataChannel.readyState === 'open') {
                 try {
-                    // Daydream Scope expects JSON like {"prompt": "value"} or specific param updates
-                    const payload = JSON.stringify({ prompt: promptText });
+                    // Daydream Scope expects prompts array with weight 100.0
+                    const payload = JSON.stringify({ 
+                        prompt: promptText,
+                        prompts: [{ text: promptText, weight: 100.0 }]
+                    });
                     dataChannel.send(payload);
                     logStatus(`Prompt sent via Data Channel 'parameters'. Payload: ${payload}`);
                 } catch (error) {
