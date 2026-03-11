@@ -212,8 +212,8 @@
                 }
             };
 
-            // Request to receive video and audio
-            pc.addTransceiver('video', { direction: 'recvonly' });
+            // Request to receive video and audio (using sendrecv to match native UI behavior)
+            pc.addTransceiver('video', { direction: 'sendrecv' });
             pc.addTransceiver('audio', { direction: 'recvonly' });
             
             // Setup parameters datachannel so Scope backend can receive prompts
