@@ -235,10 +235,13 @@
         }
 
         const INITIAL_PARAMS = {
-            pipeline_ids: ["longlive"],
+            pipeline_ids: ["memflow"],
             input_mode: "text",
             prompts: [{ text: "A cinematic landscape", weight: 1.0 }],
-            prompt_interpolation_method: "linear"
+            prompt_interpolation_method: "linear",
+            denoising_step_list: [700, 500],
+            noise_controller: true,
+            manage_cache: true
         };
 
         // Strategy 1: JSON format with full ICE gathering
