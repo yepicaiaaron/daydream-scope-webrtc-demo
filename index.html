@@ -270,12 +270,7 @@
             const payload = { 
                 sdp: finalSdp, 
                 type: 'offer',
-                initialParameters: {
-                    pipeline_ids: ["longlive"],
-                    input_mode: "text",
-                    prompt: "A cinematic landscape",
-                    paused: false
-                }
+                initialParameters: INITIAL_PARAMS
             };
 
             const answer = await sendApiRequest(
