@@ -73,8 +73,56 @@ def forward_api_v1(subpath):
         abort(500, description=str(e))
 
 @app.route("/")
-def hello():
-    return "Daydream Scope Proxy is running."
+def index():
+    return open("index.html").read()
+
+import io
+import base64
+try:
+    from PIL import Image
+except ImportError:
+    pass # Handled in requirements.txt
+
+@app.route("/api/generate-image", methods=["POST"])
+def generate_image():
+    if not request.is_json:
+        abort(400, description="Request must be JSON")
+    
+    prompt = request.json.get("prompt", "a cinematic scene")
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        abort(500, description="GEMINI_API_KEY not configured")
+
+    try:
+        # Call Imagen 3 via Gemini API
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key={api_key}"
+        payload = {
+            "instances": [{"prompt": prompt}],
+            "parameters": {
+                "sampleCount": 1,
+                "aspectRatio": "16:9",
+                "outputOptions": {"mimeType": "image/jpeg"}
+            }
+        }
+        res = requests.post(url, json=payload)
+        res.raise_for_status()
+        
+        data = res.json()
+        b64_img = data["predictions"][0]["bytesBase64Encoded"]
+        
+        # Resize image to exact VACE size (e.g. 576x320)
+        img_data = base64.b64decode(b64_img)
+        img = Image.open(io.BytesIO(img_data))
+        img = img.resize((576, 320), Image.Resampling.LANCZOS)
+        
+        buffered = io.BytesIO()
+        img.save(buffered, format="JPEG")
+        b64_resized = base64.b64encode(buffered.getvalue()).decode('utf-8')
+        
+        return jsonify({"image": f"data:image/jpeg;base64,{b64_resized}"})
+    except Exception as e:
+        app.logger.error(f"Error generating image: {e}")
+        abort(500, description=str(e))
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
