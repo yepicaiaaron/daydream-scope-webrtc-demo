@@ -125,6 +125,14 @@
             <button id="disconnectBtn" style="background-color: #ff5252; color: white;">Disconnect</button>
         </div>
 
+        <div class="controls" style="margin-top: 10px; align-items: center; border-bottom: 1px solid #333; padding-bottom: 15px; margin-bottom: 15px;">
+            <label style="color: #e0e0e0; font-family: monospace; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="useWebcamToggle" style="width: 18px; height: 18px;">
+                Use Webcam (Video-to-Video)
+            </label>
+            <button id="clearCacheBtn" style="background-color: #ff9800; color: #121212; padding: 8px 12px; font-size: 0.85em; margin-left: auto;">🧹 Clear Backend Cache</button>
+        </div>
+
         <div id="status-log"></div>
     </div>
 
@@ -135,6 +143,8 @@
         const sendPromptBtn = document.getElementById('sendPromptBtn');
         const connectStreamBtn = document.getElementById('connectStreamBtn');
         const disconnectBtn = document.getElementById('disconnectBtn');
+        const useWebcamToggle = document.getElementById('useWebcamToggle');
+        const clearCacheBtn = document.getElementById('clearCacheBtn');
         const statusLog = document.getElementById('status-log');
 
         const SCOPE_API_BASE = 'https://daydream-scope-proxy.onrender.com';
@@ -204,9 +214,7 @@
                 }
             };
 
-            // Request to receive video and audio (using sendrecv to match native UI behavior)
-            pc.addTransceiver('video', { direction: 'sendrecv' });
-            pc.addTransceiver('audio', { direction: 'recvonly' });
+
             
             // Setup parameters datachannel so Scope backend can receive prompts
             dataChannel = pc.createDataChannel("parameters", {ordered: true});
@@ -252,6 +260,27 @@
         async function strategy1() {
             logStatus('--- Trying Strategy 1: JSON payload + Full ICE Gathering ---');
             peerConnection = createPeerConnectionBase();
+            
+            let localStream = null;
+            if (useWebcamToggle.checked) {
+                logStatus('📷 Requesting webcam access...');
+                try {
+                    localStream = await navigator.mediaDevices.getUserMedia({ video: { width: 576, height: 320, frameRate: 25 }, audio: false });
+                    localStream.getTracks().forEach(track => {
+                        peerConnection.addTrack(track, localStream);
+                    });
+                    INITIAL_PARAMS.input_mode = "video";
+                    logStatus('📷 Webcam stream added to WebRTC connection');
+                } catch(e) {
+                    logStatus('❌ Webcam access denied or failed: ' + e.message, true);
+                    INITIAL_PARAMS.input_mode = "text";
+                    peerConnection.addTransceiver('video', { direction: 'sendrecv' });
+                }
+            } else {
+                INITIAL_PARAMS.input_mode = "text";
+                peerConnection.addTransceiver('video', { direction: 'sendrecv' });
+            }
+            peerConnection.addTransceiver('audio', { direction: 'recvonly' });
             
             const offer = await peerConnection.createOffer();
             await peerConnection.setLocalDescription(offer);
@@ -359,6 +388,21 @@
         connectStreamBtn.addEventListener('click', connectStream);
         disconnectBtn.addEventListener('click', disconnect);
         sendPromptBtn.addEventListener('click', sendPrompt);
+        
+        clearCacheBtn.addEventListener('click', () => {
+            logStatus('🧹 Sending Clear Cache command...');
+            if (dataChannel && dataChannel.readyState === 'open') {
+                try {
+                    const payload = JSON.stringify({ reset_cache: true });
+                    dataChannel.send(payload);
+                    logStatus(`Sent via Data Channel: ${payload}`);
+                } catch (error) {
+                    logStatus(`Error sending clear cache: ${error.message}`, true);
+                }
+            } else {
+                logStatus('Data channel not open. Ensure stream is connected.', true);
+            }
+        });
         promptInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendPrompt();
         });
