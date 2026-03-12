@@ -121,16 +121,8 @@
         <div class="controls">
             <input type="text" id="promptInput" placeholder="Enter prompt to influence video...">
             <button id="sendPromptBtn" disabled>Send Prompt</button>
-            <button id="connectStreamBtn">Connect Stream (Auto-Retry)</button>
+            <button id="connectStreamBtn">Connect Stream</button>
             <button id="disconnectBtn" style="background-color: #ff5252; color: white;">Disconnect</button>
-        </div>
-        
-        <div class="controls" style="margin-top: 10px;">
-            <button class="strat-btn" onclick="testStrategy(1)">Test Strat 1</button>
-            <button class="strat-btn" onclick="testStrategy(2)">Test Strat 2</button>
-            <button class="strat-btn" onclick="testStrategy(3)">Test Strat 3</button>
-            <button class="strat-btn" onclick="testStrategy(4)">Test Strat 4</button>
-            <button class="strat-btn" onclick="testStrategy(5)">Test Strat 5</button>
         </div>
 
         <div id="status-log"></div>
@@ -308,153 +300,20 @@
             }, 1000);
         }
 
-        // Strategy 2: Plain Text SDP (application/sdp) + Full ICE
-        async function strategy2() {
-            logStatus('--- Trying Strategy 2: Raw application/sdp text + Full ICE ---');
-            peerConnection = createPeerConnectionBase();
-            
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-
-            await new Promise((resolve) => {
-                if (peerConnection.iceGatheringState === 'complete') return resolve();
-                const check = () => {
-                    if (peerConnection.iceGatheringState === 'complete') {
-                        peerConnection.removeEventListener('icegatheringstatechange', check);
-                        resolve();
-                    }
-                };
-                peerConnection.addEventListener('icegatheringstatechange', check);
-                setTimeout(() => { peerConnection.removeEventListener('icegatheringstatechange', check); resolve(); }, 3000);
-            });
-
-            const finalSdp = peerConnection.localDescription.sdp;
-            const answerText = await sendApiRequest(
-                SCOPE_WEBRTC_OFFER_ENDPOINT, 
-                { 'Content-Type': 'application/sdp', 'Accept': 'application/sdp' },
-                finalSdp,
-                false
-            );
-            
-            logStatus('Strategy 2 Server Answer received', false, answerText);
-            let answerDesc = { type: 'answer', sdp: answerText };
-            try { answerDesc = JSON.parse(answerText); } catch(e) {}
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(answerDesc));
-        }
-
-        // Strategy 3: JSON payload + Trickle ICE (Immediate offer, no waiting)
-        async function strategy3() {
-            logStatus('--- Trying Strategy 3: JSON payload + Trickle ICE (No waiting) ---');
-            peerConnection = createPeerConnectionBase();
-            
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-
-            const answer = await sendApiRequest(
-                SCOPE_WEBRTC_OFFER_ENDPOINT, 
-                { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                JSON.stringify({ sdp: offer.sdp, type: 'offer', initialParameters: INITIAL_PARAMS })
-            );
-            
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-        }
-
-        // Strategy 4: Raw SDP Text + Trickle ICE
-        async function strategy4() {
-            logStatus('--- Trying Strategy 4: Raw application/sdp + Trickle ICE ---');
-            peerConnection = createPeerConnectionBase();
-            
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-
-            const answerText = await sendApiRequest(
-                SCOPE_WEBRTC_OFFER_ENDPOINT, 
-                { 'Content-Type': 'application/sdp', 'Accept': 'application/sdp' },
-                offer.sdp,
-                false
-            );
-            
-            let answerDesc = { type: 'answer', sdp: answerText };
-            try { answerDesc = JSON.parse(answerText); } catch(e) {}
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(answerDesc));
-        }
-
-        // Strategy 5: Add a DataChannel manually before offer
-        async function strategy5() {
-            logStatus('--- Trying Strategy 5: DataChannel forced + JSON + Full ICE ---');
-            peerConnection = createPeerConnectionBase();
-            
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-
-            await new Promise((resolve) => {
-                if (peerConnection.iceGatheringState === 'complete') return resolve();
-                const check = () => {
-                    if (peerConnection.iceGatheringState === 'complete') {
-                        peerConnection.removeEventListener('icegatheringstatechange', check);
-                        resolve();
-                    }
-                };
-                peerConnection.addEventListener('icegatheringstatechange', check);
-                setTimeout(() => { peerConnection.removeEventListener('icegatheringstatechange', check); resolve(); }, 3000);
-            });
-
-            const finalSdp = peerConnection.localDescription.sdp;
-            
-            const payload = { 
-                sdp: finalSdp, 
-                type: 'offer',
-                initialParameters: INITIAL_PARAMS
-            };
-            
-            const answer = await sendApiRequest(
-                SCOPE_WEBRTC_OFFER_ENDPOINT, 
-                { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                JSON.stringify(payload)
-            );
-            
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-        }
-
-        const strategies = [strategy1, strategy2, strategy3, strategy4, strategy5];
-
-        async function testStrategy(num) {
-            disconnect();
-            isConnecting = true;
-            connectStreamBtn.disabled = true;
-            statusLog.innerHTML = '';
-            
-            try {
-                await strategies[num-1]();
-                logStatus(`✅ Strategy ${num} completed SDP exchange without errors! Waiting for stream...`);
-            } catch (error) {
-                logStatus(`❌ Strategy ${num} Failed: ${error.message}`, true);
-                disconnect();
-            }
-        }
-
-        async function executeConnectionLoop() {
-            for (let i = 0; i < strategies.length; i++) {
-                try {
-                    await strategies[i]();
-                    logStatus(`✅ Strategy ${i+1} completed SDP exchange without errors! Waiting for stream...`);
-                    return; 
-                } catch (error) {
-                    logStatus(`❌ Strategy ${i+1} Failed: ${error.message}`, true);
-                    if (peerConnection) peerConnection.close();
-                }
-            }
-            logStatus('🚨 All 5 connection strategies failed.', true);
-            resetUI();
-        }
 
         async function connectStream() {
             disconnect();
             isConnecting = true;
             statusLog.innerHTML = '';
-            logStatus('🚀 Starting automated WebRTC connection sequence...');
+            logStatus('🚀 Starting WebRTC connection...');
             connectStreamBtn.disabled = true;
-            await executeConnectionLoop();
+            try {
+                await strategy1();
+                logStatus(`✅ Connection sequence completed! Waiting for stream...`);
+            } catch (error) {
+                logStatus(`❌ Connection Failed: ${error.message}`, true);
+                disconnect();
+            }
         }
         
         function disconnect() {
