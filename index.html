@@ -196,7 +196,7 @@
         const clearCacheBtn = document.getElementById('clearCacheBtn');
         const statusLog = document.getElementById('status-log');
 
-        const SCOPE_API_BASE = 'https://daydream-scope-proxy.onrender.com';
+        const SCOPE_API_BASE = '';
         const SCOPE_WEBRTC_OFFER_ENDPOINT = `${SCOPE_API_BASE}/api/v1/webrtc/offer`;
         const pipelineSelect = document.getElementById('pipelineSelect');
         const postprocessorSelect = document.getElementById('postprocessorSelect');
@@ -267,14 +267,21 @@
             }
         });
 
-        nanoBananaBtn.addEventListener('click', () => {
+        nanoBananaBtn.addEventListener('click', async () => {
             logStatus('🍌 Triggering Nano Banana Pro agent to generate the perfect VACE reference image...');
-            setTimeout(() => {
-                logStatus('🍌 Nano Banana Pro finished! Image injected into VACE memory buffer.');
-                // Placeholder image for demo
-                vacePreview.src = 'https://picsum.photos/576/320';
+            const promptText = promptInput.value || "A cinematic scene";
+            try {
+                const res = await sendApiRequest(`${SCOPE_API_BASE}/api/generate-image`, 
+                    { 'Content-Type': 'application/json' }, 
+                    JSON.stringify({ prompt: promptText })
+                );
+                vaceBase64Image = res.image;
+                vacePreview.src = vaceBase64Image;
                 vacePreviewContainer.style.display = 'flex';
-            }, 2000);
+                logStatus('🍌 Nano Banana Pro finished! Image injected into VACE memory buffer.');
+            } catch (e) {
+                logStatus(`❌ Nano Banana Pro failed: ${e.message}`, true);
+            }
         });
 
         function updateInitialParams() {
