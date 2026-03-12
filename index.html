@@ -239,7 +239,7 @@
         const pipelineOverride = urlParams.get('pipeline');
         const postprocessorOverride = urlParams.get('postprocessor');
 
-        const pipelineIds = pipelineOverride ? [pipelineOverride] : ["longlive"];
+        const pipelineIds = pipelineOverride ? [pipelineOverride] : ["memflow", "flashvsr"];
         if (postprocessorOverride) {
             pipelineIds.push(postprocessorOverride);
         }
