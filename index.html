@@ -234,8 +234,12 @@
             return expectJson ? JSON.parse(text) : text;
         }
 
+        // Allow overriding pipeline via URL parameter for testing
+        const urlParams = new URLSearchParams(window.location.search);
+        const pipelineOverride = urlParams.get('pipeline');
+
         const INITIAL_PARAMS = {
-            pipeline_ids: ["longlive"],
+            pipeline_ids: pipelineOverride ? [pipelineOverride] : ["longlive"],
             input_mode: "text",
             prompts: [{ text: "A 3D animated scene. A **panda** walks along a path towards the camera in a park on a spring day.", weight: 100.0 }],
             prompt_interpolation_method: "linear",
