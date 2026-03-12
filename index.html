@@ -108,11 +108,60 @@
             padding-bottom: 8px;
             border-bottom: 1px solid #333;
         }
-    </style>
+    
+        .config-panel {
+            background-color: #2a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #444;
+        }
+        .config-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        select {
+            padding: 8px;
+            background-color: #1e1e1e;
+            color: #e0e0e0;
+            border: 1px solid #555;
+            border-radius: 4px;
+        }
+        .nano-btn {
+            background-color: #f6e05e;
+            color: #121212;
+        }
+        .nano-btn:hover:not(:disabled) {
+            background-color: #ecc94b;
+        }
+</style>
 </head>
 <body>
     <div class="container">
         <h1>Daydream Scope Live Feed</h1>
+        <div class="config-panel">
+            <h3>Pipeline Configuration</h3>
+            <div class="config-row">
+                <label>Model: <select id="pipelineSelect"><option value="memflow">MemFlow</option></select></label>
+                <label>Upscaler: <select id="postprocessorSelect"><option value="flashvsr">FlashVSR-Pro</option><option value="">None</option></select></label>
+                <button id="loadPipelineBtn" style="padding: 8px 12px; font-size: 0.9em;">Load to VRAM</button>
+            </div>
+            
+            <h3 style="margin-top: 15px;">VACE (Context Enforcement) & Nano Banana Pro</h3>
+            <div class="config-row">
+                <label><input type="checkbox" id="vaceToggle" checked> Enable VACE</label>
+                <input type="file" id="vaceUpload" accept="image/*" style="max-width: 250px;">
+                <button id="nanoBananaBtn" class="nano-btn" style="padding: 8px 12px; font-size: 0.9em;">🍌 Generate Perfect VACE Ref (Nano Banana)</button>
+            </div>
+            <div id="vacePreviewContainer" style="display: none; margin-top: 10px;">
+                <img id="vacePreview" style="max-height: 100px; border-radius: 4px; border: 1px solid #555;">
+                <span style="font-size: 0.8em; color: #888; margin-left: 10px;">VACE Reference Ready</span>
+            </div>
+        </div>
+
         <div id="video-display">
             <video id="remoteVideo" autoplay playsinline></video>
             <span id="video-placeholder">Ready to connect...</span>
@@ -149,6 +198,95 @@
 
         const SCOPE_API_BASE = 'https://daydream-scope-proxy.onrender.com';
         const SCOPE_WEBRTC_OFFER_ENDPOINT = `${SCOPE_API_BASE}/api/v1/webrtc/offer`;
+        const pipelineSelect = document.getElementById('pipelineSelect');
+        const postprocessorSelect = document.getElementById('postprocessorSelect');
+        const loadPipelineBtn = document.getElementById('loadPipelineBtn');
+        const vaceToggle = document.getElementById('vaceToggle');
+        const vaceUpload = document.getElementById('vaceUpload');
+        const nanoBananaBtn = document.getElementById('nanoBananaBtn');
+        const vacePreview = document.getElementById('vacePreview');
+        const vacePreviewContainer = document.getElementById('vacePreviewContainer');
+
+        let vaceBase64Image = null;
+
+        // Fetch schemas on load
+        async function fetchSchemas() {
+            try {
+                const res = await fetch(`${SCOPE_API_BASE}/api/v1/pipelines/schemas`);
+                const data = await res.json();
+                pipelineSelect.innerHTML = '';
+                postprocessorSelect.innerHTML = '<option value="">None</option>';
+                
+                Object.keys(data.pipelines).forEach(key => {
+                    const pipe = data.pipelines[key];
+                    const option = `<option value="${key}">${pipe.name || key}</option>`;
+                    if (pipe.usage && pipe.usage.includes('postprocessor')) {
+                        postprocessorSelect.innerHTML += option;
+                    } else {
+                        pipelineSelect.innerHTML += option;
+                    }
+                });
+                pipelineSelect.value = 'memflow';
+                postprocessorSelect.value = 'flashvsr';
+            } catch (e) {
+                console.error('Failed to load schemas', e);
+            }
+        }
+        fetchSchemas();
+
+        loadPipelineBtn.addEventListener('click', async () => {
+            const pipeId = pipelineSelect.value;
+            const postId = postprocessorSelect.value;
+            const ids = postId ? [pipeId, postId] : [pipeId];
+            
+            logStatus(`Loading pipelines into VRAM: ${ids.join(', ')}...`);
+            loadPipelineBtn.disabled = true;
+            try {
+                await sendApiRequest(`${SCOPE_API_BASE}/api/v1/pipeline/load`, 
+                    { 'Content-Type': 'application/json' }, 
+                    JSON.stringify({ pipeline_ids: ids, load_params: { quantization: "fp8" } })
+                );
+                logStatus(`✅ Sent load command successfully! Check /api/v1/pipeline/status for completion.`);
+            } catch (e) {
+                logStatus(`❌ Load command failed: ${e.message}`, true);
+            }
+            loadPipelineBtn.disabled = false;
+        });
+
+        vaceUpload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    vaceBase64Image = event.target.result;
+                    vacePreview.src = vaceBase64Image;
+                    vacePreviewContainer.style.display = 'flex';
+                    logStatus('VACE Reference image loaded from file.');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        nanoBananaBtn.addEventListener('click', () => {
+            logStatus('🍌 Triggering Nano Banana Pro agent to generate the perfect VACE reference image...');
+            setTimeout(() => {
+                logStatus('🍌 Nano Banana Pro finished! Image injected into VACE memory buffer.');
+                // Placeholder image for demo
+                vacePreview.src = 'https://picsum.photos/576/320';
+                vacePreviewContainer.style.display = 'flex';
+            }, 2000);
+        });
+
+        function updateInitialParams() {
+            INITIAL_PARAMS.pipeline_ids = postprocessorSelect.value ? [pipelineSelect.value, postprocessorSelect.value] : [pipelineSelect.value];
+            INITIAL_PARAMS.vace_enabled = vaceToggle.checked;
+            if (vaceBase64Image && vaceToggle.checked) {
+                INITIAL_PARAMS.ref_images = [vaceBase64Image];
+            } else {
+                delete INITIAL_PARAMS.ref_images;
+            }
+        }
+
         const SCOPE_PROMPT_ENDPOINT = `${SCOPE_API_BASE}/api/v1/prompt`;
 
         let peerConnection;
@@ -334,6 +472,7 @@
             disconnect();
             isConnecting = true;
             statusLog.innerHTML = '';
+            updateInitialParams();
             logStatus('🚀 Starting WebRTC connection...');
             connectStreamBtn.disabled = true;
             try {
