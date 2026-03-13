@@ -149,13 +149,32 @@
                 recording: false, vace_enabled: true
             };
 
+            // Fix API payload wrapper logic to match backend expectations exactly
+            const payload = {
+                sdp: peerConnection.localDescription.sdp,
+                type: 'offer',
+                initialParameters: initialParams
+            };
+
             try {
                 const response = await fetch(`${SCOPE_API_BASE}/api/v1/webrtc/offer`, {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ sdp: peerConnection.localDescription.sdp, type: 'offer', initialParameters: initialParams })
+                    body: JSON.stringify(payload)
                 });
                 const answer = await response.json();
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+                
+                // Add fallback to unpause generation via Data Channel just in case
+                setTimeout(() => {
+                    if (dataChannel && dataChannel.readyState === 'open') {
+                        dataChannel.send(JSON.stringify({ 
+                            prompt: initialParams.prompts[0].text,
+                            prompts: initialParams.prompts,
+                            paused: false
+                        }));
+                        log("✅ Sent stream initialization signal.");
+                    }
+                }, 1000);
             } catch (e) {
                 log("❌ Video WebRTC Error: " + e.message);
                 document.getElementById('connectBtn').disabled = false;
