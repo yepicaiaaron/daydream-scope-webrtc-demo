@@ -115,6 +115,36 @@ try:
 except ImportError:
     pass # Handled in requirements.txt
 
+@app.route("/api/expand-prompt", methods=["POST"])
+def expand_prompt():
+    if not request.is_json:
+        abort(400, description="Request must be JSON")
+    
+    seed = request.json.get("seed", "")
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        abort(500, description="GEMINI_API_KEY not configured")
+
+    try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+        sys_instruct = (
+            "You are a visionary film director generating a highly descriptive, 40-60 word prompt for an AI video generation model. "
+            "ALWAYS include: Subject description, Environment details, Lighting, a specific camera action, and high quality keywords (photorealistic, 8k). "
+            "Output ONLY the final prompt text."
+        )
+        payload = {
+            "systemInstruction": {"parts": [{"text": sys_instruct}]},
+            "contents": [{"parts": [{"text": f"Seed idea: {seed}"}]}]
+        }
+        res = requests.post(url, json=payload)
+        res.raise_for_status()
+        data = res.json()
+        expanded = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        return jsonify({"expanded": expanded})
+    except Exception as e:
+        app.logger.error(f"Error expanding prompt: {e}")
+        return jsonify({"expanded": f"{seed}, highly detailed, cinematic lighting, 8k resolution, wide angle tracking shot, photorealistic"})
+
 @app.route("/api/generate-image", methods=["POST"])
 def generate_image():
     if not request.is_json:
