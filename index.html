@@ -146,7 +146,7 @@
             <h3>Pipeline Configuration</h3>
             <div class="config-row">
                 <label>Model: <select id="pipelineSelect"><option value="memflow">MemFlow</option></select></label>
-                <label>Upscaler: <select id="postprocessorSelect"><option value="flashvsr">FlashVSR-Pro</option><option value="">None</option></select></label>
+                <label>Upscaler: <select id="postprocessorSelect"><option value="rife">RIFE (Frame Interpolation)</option><option value="flashvsr">FlashVSR-Pro</option><option value="">None</option></select></label>
                 <button id="loadPipelineBtn" style="padding: 8px 12px; font-size: 0.9em;">Load to VRAM</button>
             </div>
             
@@ -227,7 +227,7 @@
                     }
                 });
                 pipelineSelect.value = 'memflow';
-                postprocessorSelect.value = 'flashvsr';
+                postprocessorSelect.value = 'rife';
             } catch (e) {
                 console.error('Failed to load schemas', e);
             }
@@ -384,7 +384,7 @@
         const pipelineOverride = urlParams.get('pipeline');
         const postprocessorOverride = urlParams.get('postprocessor');
 
-        const pipelineIds = pipelineOverride ? [pipelineOverride] : ["memflow", "flashvsr"];
+        const pipelineIds = pipelineOverride ? [pipelineOverride] : ["memflow", "rife"];
         if (postprocessorOverride) {
             pipelineIds.push(postprocessorOverride);
         }
