@@ -383,14 +383,28 @@
                 }
 
                 lyriaWs.onmessage = async (evt) => {
-                    if (evt.data instanceof Blob) return;
+                    if (evt.data instanceof Blob) {
+                        const buffer = await evt.data.arrayBuffer();
+                        const bytes = new Uint8Array(buffer);
+                        
+                        // Handle serverContent.audioChunks manually if needed, or if it sends raw bytes?
+                        // Let's assume it sends JSON for now. If it sends binary, we'd need to parse it.
+                        // Actually, BidiGenerateContent sends JSON strings over the websocket.
+                        return;
+                    }
                     const msg = JSON.parse(evt.data);
                     
                     if (msg.setupComplete) {
-                        const payload = {
-                            clientContent: { weightedPrompts: [{ text: promptText, weight: 1.0 }] }
-                        };
-                        lyriaWs.send(JSON.stringify(payload));
+                        // For BidiGenerateMusic (Lyria), the message structure is different.
+                        // Wait, looking at the python code:
+                        // `clientContent: { weightedPrompts: [...] }`
+                        // `musicGenerationConfig: { ... }`
+                        // Let's try sending as separate wrapper objects or a single client content?
+                        // The python library sends:
+                        // `{"clientContent": {"weightedPrompts": [{"text": promptText, "weight": 1.0}]}}`
+                        // `{"musicGenerationConfig": {"temperature": 1.0, "bpm": 90}}`
+                        // `{"playbackControl": "PLAY"}`
+                        lyriaWs.send(JSON.stringify({ clientContent: { weightedPrompts: [{ text: promptText, "weight": 1.0 }] } }));
                         lyriaWs.send(JSON.stringify({ musicGenerationConfig: { temperature: 1.0, bpm: 90 } }));
                         lyriaWs.send(JSON.stringify({ playbackControl: "PLAY" }));
                     }
