@@ -31,7 +31,7 @@
         <h2>📺 The Broadcast Feed</h2>
         <div id="videoContainer">
             <span id="video-placeholder" style="position: absolute;">Ready to connect...</span>
-            <video id="remoteVideo" autoplay playsinline></video>
+            <video id="remoteVideo" autoplay playsinline muted></video>
         </div>
         <div class="control-group" style="margin-top: 15px; display: flex; gap: 10px;">
             <button id="connectBtn" onclick="connectStream()">1. Connect GPU Video</button>
@@ -127,7 +127,9 @@
             
             peerConnection.onconnectionstatechange = () => log("WebRTC State: " + peerConnection.connectionState);
             peerConnection.ontrack = (event) => {
-                document.getElementById('remoteVideo').srcObject = event.streams[0];
+                const vid = document.getElementById('remoteVideo');
+                vid.srcObject = event.streams[0];
+                vid.play().catch(e => log("⚠️ Video Autoplay Blocked: " + e.message));
                 document.getElementById('video-placeholder').style.display = 'none';
                 document.getElementById('badgeVideo').className = 'badge on';
                 document.getElementById('badgeVideo').innerText = 'Video: Connected';
