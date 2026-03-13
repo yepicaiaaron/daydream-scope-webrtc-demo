@@ -287,6 +287,14 @@
         function updateInitialParams() {
             INITIAL_PARAMS.pipeline_ids = postprocessorSelect.value ? [pipelineSelect.value, postprocessorSelect.value] : [pipelineSelect.value];
             INITIAL_PARAMS.vace_enabled = vaceToggle.checked;
+            
+            const currentPrompt = document.getElementById('promptInput').value.trim();
+            if (currentPrompt) {
+                INITIAL_PARAMS.prompts = [{ text: currentPrompt, weight: 100.0 }];
+            } else {
+                INITIAL_PARAMS.prompts = [{ text: "A breathtaking wide angle cinematic landscape, extremely detailed, 8k resolution, wide field of view", weight: 100.0 }];
+            }
+
             if (vaceBase64Image && vaceToggle.checked) {
                 INITIAL_PARAMS.ref_images = [vaceBase64Image];
             } else {
