@@ -282,17 +282,24 @@
                 }
 
                 liveWs.onmessage = async (evt) => {
-                    if (evt.data instanceof Blob) return; // Ignoring raw blobs for now
-                    const msg = JSON.parse(evt.data);
-                    
-                    if (msg.serverContent && msg.serverContent.modelTurn) {
-                        const parts = msg.serverContent.modelTurn.parts;
-                        for (let p of parts) {
-                            if (p.inlineData && p.inlineData.data) {
-                                playbackQueue.push(p.inlineData.data);
-                                processPlaybackQueue();
+                    let msgText = evt.data;
+                    if (evt.data instanceof Blob) {
+                        msgText = await evt.data.text();
+                    }
+                    try {
+                        const msg = JSON.parse(msgText);
+                        
+                        if (msg.serverContent && msg.serverContent.modelTurn) {
+                            const parts = msg.serverContent.modelTurn.parts;
+                            for (let p of parts) {
+                                if (p.inlineData && p.inlineData.data) {
+                                    playbackQueue.push(p.inlineData.data);
+                                    processPlaybackQueue();
+                                }
                             }
                         }
+                    } catch(e) {
+                        console.error("Error parsing voice message", e);
                     }
                 };
 
@@ -383,18 +390,14 @@
                 }
 
                 lyriaWs.onmessage = async (evt) => {
+                    let msgText = evt.data;
                     if (evt.data instanceof Blob) {
-                        const buffer = await evt.data.arrayBuffer();
-                        const bytes = new Uint8Array(buffer);
-                        
-                        // Handle serverContent.audioChunks manually if needed, or if it sends raw bytes?
-                        // Let's assume it sends JSON for now. If it sends binary, we'd need to parse it.
-                        // Actually, BidiGenerateContent sends JSON strings over the websocket.
-                        return;
+                        msgText = await evt.data.text();
                     }
-                    const msg = JSON.parse(evt.data);
+                    try {
+                        const msg = JSON.parse(msgText);
                     
-                    if (msg.setupComplete) {
+                        if (msg.setupComplete) {
                         // For BidiGenerateMusic (Lyria), the message structure is different.
                         // Wait, looking at the python code:
                         // `clientContent: { weightedPrompts: [...] }`
@@ -416,6 +419,9 @@
                                 processMusicQueue();
                             }
                         }
+                    }
+                    } catch(e) {
+                        console.error("Error parsing Lyria message:", e);
                     }
                 };
 
