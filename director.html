@@ -125,6 +125,7 @@
                 { urls: 'stun:stun1.l.google.com:19302' }
             ] });
             
+            peerConnection.onconnectionstatechange = () => log("WebRTC State: " + peerConnection.connectionState);
             peerConnection.ontrack = (event) => {
                 document.getElementById('remoteVideo').srcObject = event.streams[0];
                 document.getElementById('video-placeholder').style.display = 'none';
@@ -134,10 +135,11 @@
                 document.getElementById('connectBtn').innerText = "Connected";
             };
             
-            peerConnection.addTransceiver('video', { direction: 'sendrecv' });
-            peerConnection.addTransceiver('audio', { direction: 'recvonly' });
             dataChannel = peerConnection.createDataChannel("parameters", {ordered: true});
             dataChannel.onopen = () => log("✅ Video Data Channel Open!");
+            dataChannel.onerror = (e) => log("❌ Data Channel Error!");
+            peerConnection.addTransceiver('video', { direction: 'sendrecv' });
+            peerConnection.addTransceiver('audio', { direction: 'recvonly' });
 
             const offer = await peerConnection.createOffer();
             await peerConnection.setLocalDescription(offer);
