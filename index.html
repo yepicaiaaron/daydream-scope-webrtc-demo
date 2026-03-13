@@ -470,10 +470,11 @@
 
             setTimeout(() => {
                 if (dataChannel && dataChannel.readyState === 'open') {
-                    // Try both `prompts` and `prompt` formats just in case, and explicitly set paused to false
+                    // Start generation explicitly unpaused, using the prompt from INITIAL_PARAMS
+                    const startPrompt = INITIAL_PARAMS.prompts[0].text;
                     const startPayload = JSON.stringify({ 
-                        prompt: "A cinematic landscape",
-                        prompts: [{text: "A cinematic landscape", weight: 1.0}],
+                        prompt: startPrompt,
+                        prompts: [{text: startPrompt, weight: 100.0}],
                         paused: false
                     });
                     dataChannel.send(startPayload);
