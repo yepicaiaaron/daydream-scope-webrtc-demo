@@ -242,11 +242,11 @@
                         const base64Data = playbackQueue.shift();
                         const binaryString = window.atob(base64Data);
                         const len = binaryString.length;
-                        const bytes = new Uint8Array(len);
-                        for (let i = 0; i < len; i++) { bytes[i] = binaryString.charCodeAt(i); }
-                        
                         const validLen = len % 2 === 0 ? len : len - 1;
-                        const int16Array = new Int16Array(bytes.buffer, 0, validLen / 2);
+                        const bytes = new Uint8Array(validLen);
+                        for (let i = 0; i < validLen; i++) { bytes[i] = binaryString.charCodeAt(i); }
+                        
+                        const int16Array = new Int16Array(bytes.buffer);
                         
                         const audioBuffer = audioContext.createBuffer(1, int16Array.length, 24000);
                         const channelData = audioBuffer.getChannelData(0);
@@ -311,25 +311,120 @@
             }
         }
 
-        // --- 4. Director Orchestrator ---
+        // --- 4. Lyria Music API Setup (WebSocket) ---
+        let lyriaWs;
+        let musicNextStartTime = 0;
+        
+        async function startLyriaApi(promptText) {
+            initAudio();
+            log("Connecting to Lyria Music API...");
+            try {
+                const res = await fetch('/api/get-gemini-token');
+                const data = await res.json();
+                
+                const wsUrl = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateMusic?key=${data.api_key}`;
+                if (lyriaWs) lyriaWs.close();
+                
+                lyriaWs = new WebSocket(wsUrl);
+
+                lyriaWs.onopen = () => {
+                    log("✅ Lyria Music Connected! Requesting: " + promptText);
+                    const setupMsg = { setup: { model: "models/lyria-realtime-exp" } };
+                    lyriaWs.send(JSON.stringify(setupMsg));
+                };
+
+                let musicQueue = [];
+                let isProcessingMusic = false;
+
+                async function processMusicQueue() {
+                    if (isProcessingMusic || musicQueue.length === 0) return;
+                    isProcessingMusic = true;
+
+                    try {
+                        const base64Data = musicQueue.shift();
+                        const binaryString = window.atob(base64Data);
+                        const len = binaryString.length;
+                        const validLen = len % 2 === 0 ? len : len - 1;
+                        const bytes = new Uint8Array(validLen);
+                        for (let i = 0; i < validLen; i++) { bytes[i] = binaryString.charCodeAt(i); }
+                        
+                        const int16Array = new Int16Array(bytes.buffer);
+                        // Lyria Realtime uses 48000Hz PCM
+                        const audioBuffer = audioContext.createBuffer(1, int16Array.length, 48000);
+                        const channelData = audioBuffer.getChannelData(0);
+                        for (let i = 0; i < int16Array.length; i++) { channelData[i] = int16Array[i] / 32768.0; }
+                        
+                        const source = audioContext.createBufferSource();
+                        source.buffer = audioBuffer;
+                        
+                        // Connect to musicGainNode so it ducks when voiceover speaks
+                        source.connect(musicGainNode);
+                        
+                        if (musicNextStartTime < audioContext.currentTime) {
+                            musicNextStartTime = audioContext.currentTime + 0.1;
+                        }
+                        
+                        source.start(musicNextStartTime);
+                        musicNextStartTime += audioBuffer.duration;
+                        
+                        source.onended = () => {
+                            isProcessingMusic = false;
+                            processMusicQueue();
+                        };
+                        
+                        // Do not immediately recurse, wait for onended or timeout to prevent buffer overload?
+                        // Actually, WebAudio handles scheduled sources well, but to avoid memory bloat, we process next immediately.
+                        isProcessingMusic = false;
+                        processMusicQueue();
+                    } catch (err) {
+                        console.error("Music playback error:", err);
+                        isProcessingMusic = false;
+                    }
+                }
+
+                lyriaWs.onmessage = async (evt) => {
+                    if (evt.data instanceof Blob) return;
+                    const msg = JSON.parse(evt.data);
+                    
+                    if (msg.setupComplete) {
+                        const payload = {
+                            clientContent: { weightedPrompts: [{ text: promptText, weight: 1.0 }] }
+                        };
+                        lyriaWs.send(JSON.stringify(payload));
+                        lyriaWs.send(JSON.stringify({ musicGenerationConfig: { temperature: 1.0, bpm: 90 } }));
+                        lyriaWs.send(JSON.stringify({ playbackControl: "PLAY" }));
+                    }
+                    
+                    if (msg.serverContent && msg.serverContent.audioChunks) {
+                        for (let chunk of msg.serverContent.audioChunks) {
+                            if (chunk.data) {
+                                musicQueue.push(chunk.data);
+                                processMusicQueue();
+                            }
+                        }
+                    }
+                };
+
+                lyriaWs.onclose = () => {
+                    log("Lyria WebSocket disconnected.");
+                };
+            } catch (e) { 
+                log("❌ Lyria API Error: " + e); 
+            }
+        }
+
+        // --- 5. Director Orchestrator ---
         async function expandAndExecute() {
             initAudio();
             const seed = document.getElementById('seedInput').value || "Cyberpunk detective finds a clue";
             log(`🎬 DIRECTOR ACTION CALLED: "${seed}"`);
             
-            // 1. Trigger Music (Non-blocking)
-            log("🎵 Fetching new background music...");
-            fetch('/api/generate-music', {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ prompt: seed })
-            }).then(res => res.json()).then(data => {
-                if(data.audio_url) {
-                    const player = document.getElementById('musicPlayer');
-                    player.src = data.audio_url;
-                    player.play();
-                    log("🎵 Music track loaded and playing.");
-                }
-            });
+            // 1. Trigger Lyria Music
+            log("🎵 Fetching new background music from Lyria...");
+            // Stop existing HTML audio player if playing
+            const player = document.getElementById('musicPlayer');
+            player.pause();
+            startLyriaApi("cinematic underscore: " + seed);
 
             // 2. Expand Prompt via Gemini
             log("🧠 Expanding prompt via Director LLM...");
@@ -359,14 +454,31 @@
             }
 
             // 4. Trigger Voiceover Narration
-            if(liveWs && liveWs.readyState === WebSocket.OPEN) {
+            const triggerVoice = () => {
                 const clientContent = {
                     clientContent: { turns: [{ role: "user", parts: [{ text: `Narrate this scene dramatically: ${seed}` }] }], turnComplete: true }
                 };
                 liveWs.send(JSON.stringify(clientContent));
                 log("🎙️ Requested Live Voiceover narration.");
+            };
+
+            if(liveWs && liveWs.readyState === WebSocket.OPEN) {
+                triggerVoice();
             } else { 
-                log("⚠️ Live Voice Engine not connected!"); 
+                log("⚠️ Live Voice Engine not connected! Auto-connecting now...");
+                await startLiveApi();
+                // Wait for connection to establish before sending prompt
+                let retries = 0;
+                const checkWs = setInterval(() => {
+                    if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                        clearInterval(checkWs);
+                        setTimeout(triggerVoice, 1000); // Give it a second to send setup
+                    }
+                    if (++retries > 20) {
+                        clearInterval(checkWs);
+                        log("❌ Voiceover auto-connect timed out.");
+                    }
+                }, 500);
             }
         }
     </script>
