@@ -87,6 +87,17 @@ def director():
 def get_gemini_token():
     return jsonify({"api_key": os.environ.get("GEMINI_API_KEY")})
 
+@app.route("/api/audio-proxy")
+def audio_proxy():
+    url = request.args.get("url")
+    if not url:
+        abort(400)
+    try:
+        resp = requests.get(url, stream=True)
+        return Response(resp.iter_content(chunk_size=1024), content_type=resp.headers.get('Content-Type', 'audio/mpeg'))
+    except Exception as e:
+        abort(500)
+
 @app.route("/api/generate-music", methods=["POST"])
 def generate_music():
     if not request.is_json:
@@ -102,7 +113,7 @@ def generate_music():
         # For this prototype endpoint (until the LiveKit SFU is built), we will mock the Lyria response 
         # so the frontend orchestration and ducking logic can be tested seamlessly.
         app.logger.info(f"Requested Lyria audio for prompt: {prompt}")
-        return jsonify({"audio_url": "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", "status": "mocked_fallback"})
+        return jsonify({"audio_url": "/api/audio-proxy?url=https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", "status": "mocked_fallback"})
     except Exception as e:
         app.logger.error(f"Error generating music: {e}")
         abort(500, description=str(e))

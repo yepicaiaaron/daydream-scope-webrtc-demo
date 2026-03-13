@@ -103,6 +103,9 @@
                 musicGainNode.connect(audioContext.destination);
                 log("Audio routing initialized.");
             }
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
         }
 
         function duckMusic(duck) {
