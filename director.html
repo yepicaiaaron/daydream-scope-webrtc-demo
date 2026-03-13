@@ -225,37 +225,58 @@
                 };
 
                 let playbackQueue = [];
-                let isPlaying = false;
+                let nextStartTime = 0;
+                let isDucking = false;
 
                 async function processPlaybackQueue() {
-                    if (isPlaying || playbackQueue.length === 0) return;
-                    isPlaying = true;
-                    duckMusic(true); // Duck music while speaking
+                    if (playbackQueue.length === 0) return;
+                    
+                    if (!isDucking) {
+                        duckMusic(true);
+                        isDucking = true;
+                    }
 
-                    const base64Data = playbackQueue.shift();
-                    const binaryString = window.atob(base64Data);
-                    const len = binaryString.length;
-                    const bytes = new Uint8Array(len);
-                    for (let i = 0; i < len; i++) { bytes[i] = binaryString.charCodeAt(i); }
-                    const int16Array = new Int16Array(bytes.buffer);
-                    
-                    const audioBuffer = audioContext.createBuffer(1, int16Array.length, 24000);
-                    const channelData = audioBuffer.getChannelData(0);
-                    for (let i = 0; i < int16Array.length; i++) { channelData[i] = int16Array[i] / 32768.0; }
-                    
-                    const source = audioContext.createBufferSource();
-                    source.buffer = audioBuffer;
-                    source.connect(audioContext.destination);
-                    
-                    source.onended = () => {
-                        isPlaying = false;
-                        if (playbackQueue.length === 0) {
-                            duckMusic(false); // Restore music volume
-                        } else {
-                            processPlaybackQueue();
+                    try {
+                        const base64Data = playbackQueue.shift();
+                        const binaryString = window.atob(base64Data);
+                        const len = binaryString.length;
+                        const bytes = new Uint8Array(len);
+                        for (let i = 0; i < len; i++) { bytes[i] = binaryString.charCodeAt(i); }
+                        
+                        const validLen = len % 2 === 0 ? len : len - 1;
+                        const int16Array = new Int16Array(bytes.buffer, 0, validLen / 2);
+                        
+                        const audioBuffer = audioContext.createBuffer(1, int16Array.length, 24000);
+                        const channelData = audioBuffer.getChannelData(0);
+                        for (let i = 0; i < int16Array.length; i++) { channelData[i] = int16Array[i] / 32768.0; }
+                        
+                        const source = audioContext.createBufferSource();
+                        source.buffer = audioBuffer;
+                        source.connect(audioContext.destination);
+                        
+                        if (nextStartTime < audioContext.currentTime) {
+                            nextStartTime = audioContext.currentTime + 0.05; // 50ms buffer to prevent stutter
                         }
-                    };
-                    source.start();
+                        
+                        source.start(nextStartTime);
+                        nextStartTime += audioBuffer.duration;
+                        
+                        source.onended = () => {
+                            // If we've reached the end of all scheduled audio, restore music
+                            if (playbackQueue.length === 0 && audioContext.currentTime >= nextStartTime - 0.1) {
+                                duckMusic(false);
+                                isDucking = false;
+                            }
+                        };
+                        
+                        // Process the next chunk immediately to keep the pipeline full
+                        processPlaybackQueue();
+                    } catch (err) {
+                        console.error("Playback error:", err);
+                        log("❌ Audio Playback Error: " + err.message);
+                        duckMusic(false);
+                        isDucking = false;
+                    }
                 }
 
                 liveWs.onmessage = async (evt) => {
