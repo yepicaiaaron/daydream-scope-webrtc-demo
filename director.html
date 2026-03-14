@@ -508,6 +508,7 @@
             log("🧠 Director LLM evaluating scene continuation vs new scene...");
             let expandedVid = "";
             let isNewScene = true;
+            let dynamicMusicPrompt = "";
             try {
                 const expandRes = await fetch('/api/expand-prompt', {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -516,6 +517,7 @@
                 const expandData = await expandRes.json();
                 expandedVid = expandData.expanded;
                 isNewScene = expandData.is_new_scene;
+                dynamicMusicPrompt = expandData.music_prompt || `cinematic underscore: ${seed}`;
                 currentSceneContext = expandedVid; // Store for next turn
                 
                 document.getElementById('videoPromptDisplay').value = expandedVid;
@@ -539,6 +541,7 @@
             } catch (e) {
                 log("❌ Director LLM Error: " + e.message);
                 expandedVid = seed; // Fallback
+                dynamicMusicPrompt = `cinematic underscore: ${seed}`;
             }
 
             // 3. Trigger Music (Only change music if it's a new scene or auto-evolving)
@@ -549,8 +552,8 @@
                 
                 // If it's an auto-trigger, we inject chaos into the music prompt to force it to evolve
                 const musicPrompt = autoTrigger ? 
-                    `cinematic underscore escalating in tension and tempo, building up` : 
-                    `cinematic underscore: ${seed}`;
+                    `${dynamicMusicPrompt}, escalating in tension and tempo, building up` : 
+                    dynamicMusicPrompt;
                     
                 startLyriaApi(musicPrompt);
             } else {
