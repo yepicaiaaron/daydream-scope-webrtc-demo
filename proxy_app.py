@@ -141,9 +141,10 @@ def expand_prompt():
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
         sys_instruct = (
             "You are a visionary film director generating prompts for an AI video generation model. "
-            "You must output a JSON object containing exactly two fields: 'prompt' (string) and 'is_new_scene' (boolean). "
+            "You must output a JSON object containing exactly three fields: 'prompt' (string), 'music_prompt' (string), and 'is_new_scene' (boolean). "
             "1. 'prompt': A highly descriptive 40-60 word prompt. ALWAYS include Subject description, Environment details, Lighting, camera action, and high quality keywords (photorealistic, 8k). If it is a continuation of the previous scene, ensure the camera action flows naturally from the previous shot. "
-            "2. 'is_new_scene': If the user's seed is a continuation of the previous context/characters, set to false. If it introduces a completely new scene, new location, or new characters, set to true. "
+            "2. 'music_prompt': A highly varied, dynamic 5-15 word description of the perfect background music for this exact scene (e.g., 'pulsing cyberpunk dark synthwave with heavy bass' or 'ethereal orchestral string arrangement, building tension'). Avoid generic terms; specify genres, instruments, and mood. "
+            "3. 'is_new_scene': If the user's seed is a continuation of the previous context/characters, set to false. If it introduces a completely new scene, new location, or new characters, set to true. "
         )
         
         context_msg = f"Previous scene context: {previous_context}\n\nNew Seed idea: {seed}" if previous_context else f"New Seed idea: {seed}"
@@ -162,12 +163,14 @@ def expand_prompt():
         
         return jsonify({
             "expanded": result_json.get("prompt", seed),
+            "music_prompt": result_json.get("music_prompt", f"cinematic underscore: {seed}"),
             "is_new_scene": result_json.get("is_new_scene", True)
         })
     except Exception as e:
         app.logger.error(f"Error expanding prompt: {e}")
         return jsonify({
             "expanded": f"{seed}, highly detailed, cinematic lighting, 8k resolution, wide angle tracking shot, photorealistic",
+            "music_prompt": f"cinematic underscore: {seed}",
             "is_new_scene": True
         })
 
