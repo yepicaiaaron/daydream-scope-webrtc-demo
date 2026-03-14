@@ -142,7 +142,7 @@ def expand_prompt():
         sys_instruct = (
             "You are a visionary film director generating prompts for an AI video generation model. "
             "You must output a JSON object containing exactly two fields: 'prompt' (string) and 'is_new_scene' (boolean). "
-            "1. 'prompt': A highly descriptive 40-60 word prompt. ALWAYS include Subject description, Environment details, Lighting, camera action, and high quality keywords (photorealistic, 8k). "
+            "1. 'prompt': A highly descriptive 40-60 word prompt. ALWAYS include Subject description, Environment details, Lighting, camera action, and high quality keywords (photorealistic, 8k). If it is a continuation of the previous scene, ensure the camera action flows naturally from the previous shot. "
             "2. 'is_new_scene': If the user's seed is a continuation of the previous context/characters, set to false. If it introduces a completely new scene, new location, or new characters, set to true. "
         )
         

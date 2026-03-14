@@ -476,11 +476,21 @@
 
         // --- 5. Director Orchestrator ---
         let currentSceneContext = "";
+        let autoDirectorInterval = null;
+        const AUTO_SCENE_INTERVAL_MS = 25000; // Auto-evolve every 25s if idle
         
-        async function expandAndExecute() {
+        async function expandAndExecute(autoTrigger = false) {
             initAudio();
-            const seed = document.getElementById('seedInput').value || "Cyberpunk detective finds a clue";
-            log(`🎬 DIRECTOR ACTION CALLED: "${seed}"`);
+            let seed = document.getElementById('seedInput').value || "Cyberpunk detective finds a clue";
+            
+            if (autoTrigger) {
+                seed = "The story evolves naturally. Continue the action or slowly pan to reveal something new.";
+                log(`🎬 AUTO-DIRECTOR TRIGGERED: Keeping story alive...`);
+            } else {
+                log(`🎬 DIRECTOR ACTION CALLED: "${seed}"`);
+                // Reset timer when user manually interacts
+                resetAutoDirector();
+            }
             
             // 1. Expand Prompt via Gemini with Context Awareness
             log("🧠 Director LLM evaluating scene continuation vs new scene...");
@@ -519,12 +529,18 @@
                 expandedVid = seed; // Fallback
             }
 
-            // 3. Trigger Music (Only change music if it's a new scene)
-            if (isNewScene) {
-                log("🎵 Fetching new background music from Lyria...");
+            // 3. Trigger Music (Only change music if it's a new scene or auto-evolving)
+            if (isNewScene || autoTrigger) {
+                log("🎵 Fetching new evolving background music from Lyria...");
                 const player = document.getElementById('musicPlayer');
                 if (player) player.pause();
-                startLyriaApi("cinematic underscore: " + seed);
+                
+                // If it's an auto-trigger, we inject chaos into the music prompt to force it to evolve
+                const musicPrompt = autoTrigger ? 
+                    `cinematic underscore escalating in tension and tempo, building up` : 
+                    `cinematic underscore: ${seed}`;
+                    
+                startLyriaApi(musicPrompt);
             } else {
                 log("🎵 Keeping current music track for scene continuation.");
             }
@@ -561,6 +577,16 @@
                 }, 500);
             }
         }
+        
+        function resetAutoDirector() {
+            if (autoDirectorInterval) clearInterval(autoDirectorInterval);
+            autoDirectorInterval = setInterval(() => {
+                expandAndExecute(true);
+            }, AUTO_SCENE_INTERVAL_MS);
+        }
+        
+        // Start the idle timer when page loads
+        resetAutoDirector();
     </script>
 </body>
 </html>
