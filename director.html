@@ -68,6 +68,8 @@
         <div class="control-group">
             <label>Narrative Seed (few words):</label>
             <input type="text" id="seedInput" placeholder="Cyberpunk detective finds a clue">
+            <label style="margin-top: 10px;">Auto-Evolve Timing (seconds):</label>
+            <input type="number" id="promptIntervalInput" value="25" min="5" style="width: 100px; margin-bottom: 10px; display: block;" onchange="resetAutoDirector()">
             <button class="action-btn" onclick="expandAndExecute()">ACTION! 🎥</button>
         </div>
 
@@ -580,9 +582,16 @@
         
         function resetAutoDirector() {
             if (autoDirectorInterval) clearInterval(autoDirectorInterval);
+            const promptIntervalInput = document.getElementById('promptIntervalInput');
+            let intervalMs = AUTO_SCENE_INTERVAL_MS;
+            if (promptIntervalInput && promptIntervalInput.value) {
+                intervalMs = parseInt(promptIntervalInput.value) * 1000;
+                if (isNaN(intervalMs) || intervalMs < 5000) intervalMs = 25000; // minimum 5s
+            }
             autoDirectorInterval = setInterval(() => {
                 expandAndExecute(true);
-            }, AUTO_SCENE_INTERVAL_MS);
+            }, intervalMs);
+            log(`⏱️ Auto-Director timer reset to ${intervalMs / 1000} seconds.`);
         }
         
         // Start the idle timer when page loads
