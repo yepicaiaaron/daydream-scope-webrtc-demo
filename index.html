@@ -242,7 +242,7 @@
                         pipelineSelect.innerHTML += option;
                     }
                 });
-                pipelineSelect.value = 'memflow';
+                pipelineSelect.value = 'reward-forcing';
                 postprocessorSelect.value = 'rife';
             } catch (e) {
                 console.error('Failed to load schemas', e);
@@ -255,12 +255,12 @@
             const postId = postprocessorSelect.value;
             const ids = postId ? [pipeId, postId] : [pipeId];
             
-            logStatus(`Loading pipelines into VRAM: ${ids.join(', ')} (at 320p resolution for high FPS)...`);
+            logStatus(`Loading pipelines into VRAM: ${ids.join(', ')} (at 480p resolution)...`);
             loadPipelineBtn.disabled = true;
             try {
                 await sendApiRequest(`${SCOPE_API_BASE}/api/v1/pipeline/load`, 
                     { 'Content-Type': 'application/json' }, 
-                    JSON.stringify({ pipeline_ids: ids, load_params: { quantization: "fp8", height: 320, width: 576 } })
+                    JSON.stringify({ pipeline_ids: ids, load_params: { height: 480, width: 848 } })
                 );
                 logStatus(`✅ Sent load command successfully! Check /api/v1/pipeline/status for completion.`);
             } catch (e) {
