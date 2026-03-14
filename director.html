@@ -560,36 +560,47 @@
                 log("🎵 Keeping current music track for scene continuation.");
             }
 
-            // 4. Trigger Voiceover Narration
-            const triggerVoice = () => {
-                const narrationInstruction = isNewScene ? 
-                    `A brand new scene begins: ${seed}. Narrate this dramatically.` : 
-                    `Continuing the current scene: ${seed}. Narrate the next action.`;
-                    
-                const clientContent = {
-                    clientContent: { turns: [{ role: "user", parts: [{ text: narrationInstruction }] }], turnComplete: true }
-                };
-                liveWs.send(JSON.stringify(clientContent));
-                log("🎙️ Requested Live Voiceover narration.");
-            };
+            // 4. Trigger Voiceover Narration (Sparingly)
+            // If it's a manual action or a new scene, narrate. 
+            // If it's just an auto-continuation, only narrate 33% of the time to let the music breathe.
+            let shouldNarrate = true;
+            if (autoTrigger && !isNewScene) {
+                shouldNarrate = Math.random() < 0.33;
+            }
 
-            if(liveWs && liveWs.readyState === WebSocket.OPEN) {
-                triggerVoice();
-            } else { 
-                log("⚠️ Live Voice Engine not connected! Auto-connecting now...");
-                await startLiveApi();
-                // Wait for connection to establish before sending prompt
-                let retries = 0;
-                const checkWs = setInterval(() => {
-                    if (liveWs && liveWs.readyState === WebSocket.OPEN) {
-                        clearInterval(checkWs);
-                        setTimeout(triggerVoice, 1000); // Give it a second to send setup
-                    }
-                    if (++retries > 20) {
-                        clearInterval(checkWs);
-                        log("❌ Voiceover auto-connect timed out.");
-                    }
-                }, 500);
+            if (shouldNarrate) {
+                const triggerVoice = () => {
+                    const narrationInstruction = isNewScene ? 
+                        `A brand new scene begins: ${seed}. Narrate this dramatically.` : 
+                        `Continuing the current scene: ${seed}. Narrate the next action.`;
+                        
+                    const clientContent = {
+                        clientContent: { turns: [{ role: "user", parts: [{ text: narrationInstruction }] }], turnComplete: true }
+                    };
+                    liveWs.send(JSON.stringify(clientContent));
+                    log("🎙️ Requested Live Voiceover narration.");
+                };
+
+                if(liveWs && liveWs.readyState === WebSocket.OPEN) {
+                    triggerVoice();
+                } else { 
+                    log("⚠️ Live Voice Engine not connected! Auto-connecting now...");
+                    await startLiveApi();
+                    // Wait for connection to establish before sending prompt
+                    let retries = 0;
+                    const checkWs = setInterval(() => {
+                        if (liveWs && liveWs.readyState === WebSocket.OPEN) {
+                            clearInterval(checkWs);
+                            setTimeout(triggerVoice, 1000); // Give it a second to send setup
+                        }
+                        if (++retries > 20) {
+                            clearInterval(checkWs);
+                            log("❌ Voiceover auto-connect timed out.");
+                        }
+                    }, 500);
+                }
+            } else {
+                log("🤫 Skipping Voiceover this round to let the music breathe.");
             }
         }
         
