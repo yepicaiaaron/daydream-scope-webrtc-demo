@@ -51,7 +51,15 @@
         <div class="control-group">
             <label>Current Music Track:</label>
             <audio id="musicPlayer" controls loop crossorigin="anonymous"></audio>
-            <div style="font-size: 0.8em; color: #888; margin-top: 5px;">(Music volume automatically ducks when voiceover plays)</div>
+            <div style="margin-top: 10px; display: flex; gap: 10px; align-items: center;">
+                <label style="margin: 0;">Music Vol:</label>
+                <input type="range" id="musicVolSlider" min="0" max="1" step="0.1" value="1.0" onchange="updateVolumes()">
+                <label style="margin: 0; margin-left: 15px;">Music Duck Vol:</label>
+                <input type="range" id="musicDuckSlider" min="0" max="1" step="0.1" value="0.2" onchange="updateVolumes()">
+                <label style="margin: 0; margin-left: 15px;">Voice Vol:</label>
+                <input type="range" id="voiceVolSlider" min="0" max="1" step="0.1" value="1.0" onchange="updateVolumes()">
+            </div>
+            <div style="font-size: 0.8em; color: #888; margin-top: 5px;">(Music volume automatically ducks to the specified level when voiceover plays)</div>
         </div>
     </div>
 
@@ -84,6 +92,26 @@
         // Audio routing for Ducking
         let musicElementSource;
         let musicGainNode;
+        let voiceGainNode;
+
+        let baseMusicVol = 1.0;
+        let duckMusicVol = 0.2;
+        let baseVoiceVol = 1.0;
+        let isMusicDucked = false;
+
+        function updateVolumes() {
+            baseMusicVol = parseFloat(document.getElementById('musicVolSlider').value);
+            duckMusicVol = parseFloat(document.getElementById('musicDuckSlider').value);
+            baseVoiceVol = parseFloat(document.getElementById('voiceVolSlider').value);
+            
+            if (voiceGainNode) {
+                voiceGainNode.gain.setTargetAtTime(baseVoiceVol, audioContext.currentTime, 0.1);
+            }
+            if (musicGainNode) {
+                musicGainNode.gain.setTargetAtTime(isMusicDucked ? duckMusicVol : baseMusicVol, audioContext.currentTime, 0.1);
+            }
+            log(`Levels updated: Music=${baseMusicVol}, Duck=${duckMusicVol}, Voice=${baseVoiceVol}`);
+        }
 
         function log(msg) {
             const div = document.createElement('div');
@@ -97,10 +125,22 @@
                 audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
                 const player = document.getElementById('musicPlayer');
                 musicElementSource = audioContext.createMediaElementSource(player);
+                
                 musicGainNode = audioContext.createGain();
+                voiceGainNode = audioContext.createGain();
+                
+                // Read initial values from sliders
+                baseMusicVol = parseFloat(document.getElementById('musicVolSlider').value);
+                duckMusicVol = parseFloat(document.getElementById('musicDuckSlider').value);
+                baseVoiceVol = parseFloat(document.getElementById('voiceVolSlider').value);
+
+                musicGainNode.gain.value = baseMusicVol;
+                voiceGainNode.gain.value = baseVoiceVol;
                 
                 musicElementSource.connect(musicGainNode);
                 musicGainNode.connect(audioContext.destination);
+                voiceGainNode.connect(audioContext.destination);
+
                 log("Audio routing initialized.");
             }
             if (audioContext.state === 'suspended') {
@@ -110,8 +150,9 @@
 
         function duckMusic(duck) {
             if (musicGainNode) {
-                // If voice is talking, duck music to 20%. Otherwise 100%.
-                musicGainNode.gain.setTargetAtTime(duck ? 0.2 : 1.0, audioContext.currentTime, 0.5);
+                isMusicDucked = duck;
+                const targetVol = duck ? duckMusicVol : baseMusicVol;
+                musicGainNode.gain.setTargetAtTime(targetVol, audioContext.currentTime, 0.5);
             }
         }
 
@@ -254,7 +295,7 @@
                         
                         const source = audioContext.createBufferSource();
                         source.buffer = audioBuffer;
-                        source.connect(audioContext.destination);
+                        source.connect(voiceGainNode);
                         
                         if (nextStartTime < audioContext.currentTime) {
                             nextStartTime = audioContext.currentTime + 0.05; // 50ms buffer to prevent stutter
