@@ -475,34 +475,38 @@
         }
 
         // --- 5. Director Orchestrator ---
+        let currentSceneContext = "";
+        
         async function expandAndExecute() {
             initAudio();
             const seed = document.getElementById('seedInput').value || "Cyberpunk detective finds a clue";
             log(`🎬 DIRECTOR ACTION CALLED: "${seed}"`);
             
-            // 1. Trigger Lyria Music
-            log("🎵 Fetching new background music from Lyria...");
-            // Stop existing HTML audio player if playing
-            const player = document.getElementById('musicPlayer');
-            player.pause();
-            startLyriaApi("cinematic underscore: " + seed);
-
-            // 2. Expand Prompt via Gemini
-            log("🧠 Expanding prompt via Director LLM...");
+            // 1. Expand Prompt via Gemini with Context Awareness
+            log("🧠 Director LLM evaluating scene continuation vs new scene...");
+            let expandedVid = "";
+            let isNewScene = true;
             try {
                 const expandRes = await fetch('/api/expand-prompt', {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ seed: seed })
+                    body: JSON.stringify({ seed: seed, previous_context: currentSceneContext })
                 });
                 const expandData = await expandRes.json();
-                const expandedVid = expandData.expanded;
+                expandedVid = expandData.expanded;
+                isNewScene = expandData.is_new_scene;
+                currentSceneContext = expandedVid; // Store for next turn
+                
                 document.getElementById('videoPromptDisplay').value = expandedVid;
                 log(`✅ Prompt expanded: ${expandedVid.substring(0, 50)}...`);
-
-                // 3. Send to Video GPU
+                log(`🔄 Scene Analysis: ${isNewScene ? "HARD CUT (New Scene)" : "CONTINUATION (Same Scene)"}`);
+                
+                // 2. Send to Video GPU
                 if(dataChannel && dataChannel.readyState === 'open') {
-                    // Send clear cache first to enforce scene break
-                    dataChannel.send(JSON.stringify({ reset_cache: true }));
+                    if (isNewScene) {
+                        // Send clear cache first to enforce scene break
+                        dataChannel.send(JSON.stringify({ reset_cache: true }));
+                        log("🧹 VACE Cache Cleared for new scene.");
+                    }
                     // Send the new prompt
                     dataChannel.send(JSON.stringify({ prompt: expandedVid, prompts: [{text: expandedVid, weight: 100.0}] }));
                     log("🎥 Sent prompt to GPU Video Engine.");
@@ -512,12 +516,27 @@
 
             } catch (e) {
                 log("❌ Director LLM Error: " + e.message);
+                expandedVid = seed; // Fallback
+            }
+
+            // 3. Trigger Music (Only change music if it's a new scene)
+            if (isNewScene) {
+                log("🎵 Fetching new background music from Lyria...");
+                const player = document.getElementById('musicPlayer');
+                if (player) player.pause();
+                startLyriaApi("cinematic underscore: " + seed);
+            } else {
+                log("🎵 Keeping current music track for scene continuation.");
             }
 
             // 4. Trigger Voiceover Narration
             const triggerVoice = () => {
+                const narrationInstruction = isNewScene ? 
+                    `A brand new scene begins: ${seed}. Narrate this dramatically.` : 
+                    `Continuing the current scene: ${seed}. Narrate the next action.`;
+                    
                 const clientContent = {
-                    clientContent: { turns: [{ role: "user", parts: [{ text: `Narrate this scene dramatically: ${seed}` }] }], turnComplete: true }
+                    clientContent: { turns: [{ role: "user", parts: [{ text: narrationInstruction }] }], turnComplete: true }
                 };
                 liveWs.send(JSON.stringify(clientContent));
                 log("🎙️ Requested Live Voiceover narration.");

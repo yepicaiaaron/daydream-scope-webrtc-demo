@@ -131,6 +131,8 @@ def expand_prompt():
         abort(400, description="Request must be JSON")
     
     seed = request.json.get("seed", "")
+    previous_context = request.json.get("previous_context", "")
+    
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         abort(500, description="GEMINI_API_KEY not configured")
@@ -138,22 +140,36 @@ def expand_prompt():
     try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
         sys_instruct = (
-            "You are a visionary film director generating a highly descriptive, 40-60 word prompt for an AI video generation model. "
-            "ALWAYS include: Subject description, Environment details, Lighting, a specific camera action, and high quality keywords (photorealistic, 8k). "
-            "Output ONLY the final prompt text."
+            "You are a visionary film director generating prompts for an AI video generation model. "
+            "You must output a JSON object containing exactly two fields: 'prompt' (string) and 'is_new_scene' (boolean). "
+            "1. 'prompt': A highly descriptive 40-60 word prompt. ALWAYS include Subject description, Environment details, Lighting, camera action, and high quality keywords (photorealistic, 8k). "
+            "2. 'is_new_scene': If the user's seed is a continuation of the previous context/characters, set to false. If it introduces a completely new scene, new location, or new characters, set to true. "
         )
+        
+        context_msg = f"Previous scene context: {previous_context}\n\nNew Seed idea: {seed}" if previous_context else f"New Seed idea: {seed}"
+        
         payload = {
             "systemInstruction": {"parts": [{"text": sys_instruct}]},
-            "contents": [{"parts": [{"text": f"Seed idea: {seed}"}]}]
+            "contents": [{"parts": [{"text": context_msg}]}],
+            "generationConfig": {"responseMimeType": "application/json"}
         }
         res = requests.post(url, json=payload)
         res.raise_for_status()
         data = res.json()
-        expanded = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-        return jsonify({"expanded": expanded})
+        result_text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        import json
+        result_json = json.loads(result_text)
+        
+        return jsonify({
+            "expanded": result_json.get("prompt", seed),
+            "is_new_scene": result_json.get("is_new_scene", True)
+        })
     except Exception as e:
         app.logger.error(f"Error expanding prompt: {e}")
-        return jsonify({"expanded": f"{seed}, highly detailed, cinematic lighting, 8k resolution, wide angle tracking shot, photorealistic"})
+        return jsonify({
+            "expanded": f"{seed}, highly detailed, cinematic lighting, 8k resolution, wide angle tracking shot, photorealistic",
+            "is_new_scene": True
+        })
 
 @app.route("/api/generate-image", methods=["POST"])
 def generate_image():
