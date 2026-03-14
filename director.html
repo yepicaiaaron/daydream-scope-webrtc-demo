@@ -70,7 +70,10 @@
             <input type="text" id="seedInput" placeholder="Cyberpunk detective finds a clue">
             <label style="margin-top: 10px;">Auto-Evolve Timing (seconds):</label>
             <input type="number" id="promptIntervalInput" value="25" min="5" style="width: 100px; margin-bottom: 10px; display: block;" onchange="resetAutoDirector()">
-            <button class="action-btn" onclick="expandAndExecute()">ACTION! 🎥</button>
+            <div style="display: flex; gap: 10px;">
+                <button class="action-btn" style="flex: 2;" onclick="expandAndExecute()">ACTION! (Auto-Detect) 🎥</button>
+                <button class="action-btn" style="flex: 1; background-color: #f44336;" onclick="forceNewScene()">Hard Cut (New Scene)</button>
+            </div>
         </div>
 
         <div class="control-group">
@@ -481,6 +484,13 @@
         let autoDirectorInterval = null;
         const AUTO_SCENE_INTERVAL_MS = 25000; // Auto-evolve every 25s if idle
         
+        async function forceNewScene() {
+            // Instantly trigger a new scene using the prompt input
+            log("🎬 FORCE NEW SCENE CALLED");
+            currentSceneContext = ""; // Flush context to guarantee it's a new scene
+            await expandAndExecute(false);
+        }
+
         async function expandAndExecute(autoTrigger = false) {
             initAudio();
             let seed = document.getElementById('seedInput').value || "Cyberpunk detective finds a clue";
