@@ -6,4 +6,4 @@ services:
     startCommand: "gunicorn proxy_app:app --worker-class gevent --bind 0.0.0.0:$PORT"
     envVars:
       - key: TARGET_SCOPE_URL
-        value: "http://34.44.193.2:8000" # Your GCP Daydream Scope App IP and Port
+        value: "http://34.162.239.218:8000" # Your GCP Daydream Scope App IP and Port
